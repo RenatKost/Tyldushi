@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Тил Душі - Благодійний фонд</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Chiron+GoRound+TC:wght@200..900&family=Comfortaa:wght@300..700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <nav class="nav">
+            <div class="nav-brand">
+                <img src="images/logo.png" alt="Тил Душі" class="logo-image">
+                <span class="brand-text">Тил Душі</span>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="#home" class="nav-link"><i class="fas fa-home"></i><span>Головна</span></a></li>
+                <li><a href="#reports" class="nav-link"><i class="fas fa-chart-bar"></i><span>Звіти</span></a></li>
+                <li><a href="#fundraising" class="nav-link"><i class="fas fa-hand-holding-heart"></i><span>Збори</span></a></li>
+                <li><a href="#projects" class="nav-link"><i class="fas fa-project-diagram"></i><span>Проекти</span></a></li>
+                <li><a href="#about" class="nav-link"><i class="fas fa-users"></i><span>Про Нас</span></a></li>
+                <li><a href="#contacts" class="nav-link"><i class="fas fa-phone"></i><span>Контакти</span></a></li>
+            </ul>
+            <div class="action-buttons">
+                <button class="btn btn-help" onclick="openModal('helpModal')">Допомогти</button>
+                <button class="btn btn-receive" onclick="openModal('receiveModal')">Отримати допомогу</button>
+            </div>
+            <div class="mobile-menu-toggle">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </nav>
+        <div class="mobile-menu-overlay"></div>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+        <!-- Home Section -->
+        <section id="home" class="hero">
+            <div class="container">
+                <div class="hero-content">
+                    <div class="hero-text">
+                        <h1>Благодійний фонд<br><span class="highlight fund-name">"Тил Душі"</span></h1>
+                        <p class="hero-subtitle">Відроджуємо надію, як фенікс з попелу. Разом ми можемо більше.</p>
+                        <div class="hero-buttons">
+                            <button class="btn btn-primary" onclick="openModal('helpModal')">
+                                <i class="fas fa-heart"></i>
+                                Допомогти зараз
+                            </button>
+                            <button class="btn btn-secondary" onclick="openModal('receiveModal')">
+                                <i class="fas fa-hands-helping"></i>
+                                Отримати допомогу
+                            </button>
+                        </div>
+                    </div>
+                    <div class="hero-image">
+                        <div class="hero-logo-container">
+                            <img src="images/logo.png" alt="Тил Душі" class="hero-logo">
+                            <div class="logo-glow"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Reports Section -->
+        <section id="reports" class="section">
+            <div class="container">
+                <h2 class="section-title">Звіти про діяльність</h2>
+                <div class="reports-grid">
+                    <div class="report-card">
+                        <div class="report-icon">
+                            <i class="fas fa-chart-bar"></i>
+                        </div>
+                        <h3>Фінансовий звіт</h3>
+                        <p>Прозора звітність про використання коштів за останній квартал</p>
+                        <button class="btn btn-outline">Переглянути</button>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-icon">
+                            <i class="fas fa-users"></i>
+                        </div>
+                        <h3>Допомога надана</h3>
+                        <p>Статистика допомоги, наданої нашим фондом протягом року</p>
+                        <button class="btn btn-outline">Переглянути</button>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-icon">
+                            <i class="fas fa-project-diagram"></i>
+                        </div>
+                        <h3>Проекти 2024</h3>
+                        <p>Звіт про реалізовані проекти та їх вплив на громаду</p>
+                        <button class="btn btn-outline">Переглянути</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Fundraising Section -->
+        <section id="fundraising" class="section bg-light">
+            <div class="container">
+                <h2 class="section-title">Активні збори</h2>
+                <div class="fundraising-grid">
+                    <div class="fundraising-card">
+                        <div class="card-image">
+                            <i class="fas fa-home"></i>
+                        </div>
+                        <div class="card-content">
+                            <h3>Допомога переселенцям</h3>
+                            <p>Збираємо кошти на тимчасове житло для внутрішньо переміщених осіб</p>
+                            <div class="progress-bar">
+                                <div class="progress" style="width: 75%"></div>
+                            </div>
+                            <div class="progress-info">
+                                <span>750,000 грн зібрано</span>
+                                <span>з 1,000,000 грн</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="fundraising-card">
+                        <div class="card-image">
+                            <i class="fas fa-medkit"></i>
+                        </div>
+                        <div class="card-content">
+                            <h3>Медична допомога</h3>
+                            <p>Закупівля ліків та медичного обладнання для лікарень</p>
+                            <div class="progress-bar">
+                                <div class="progress" style="width: 45%"></div>
+                            </div>
+                            <div class="progress-info">
+                                <span>450,000 грн зібрано</span>
+                                <span>з 1,000,000 грн</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Projects Section -->
+        <section id="projects" class="section">
+            <div class="container">
+                <h2 class="section-title">Наші проекти</h2>
+                <div class="projects-grid">
+                    <div class="project-card">
+                        <div class="project-image">
+                            <i class="fas fa-graduation-cap"></i>
+                        </div>
+                        <h3>Освіта для всіх</h3>
+                        <p>Програма підтримки освіти дітей з малозабезпечених сімей</p>
+                    </div>
+                    <div class="project-card">
+                        <div class="project-image">
+                            <i class="fas fa-heartbeat"></i>
+                        </div>
+                        <h3>Здоров'я нації</h3>
+                        <p>Безкоштовні медичні консультації та обстеження</p>
+                    </div>
+                    <div class="project-card">
+                        <div class="project-image">
+                            <i class="fas fa-seedling"></i>
+                        </div>
+                        <h3>Екологічні ініціативи</h3>
+                        <p>Проекти з відновлення екології та захисту довкілля</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- About Section -->
+        <section id="about" class="section bg-light">
+            <div class="container">
+                <h2 class="section-title">Про наш фонд</h2>
+                <div class="about-content">
+                    <div class="about-text">
+                        <h3>Наша місія</h3>
+                        <p>Благодійний фонд "Тіл Душі" створений для надання допомоги та підтримки тим, хто цього потребує. Як фенікс відроджується з попелу, ми віримо в силу відновлення та надії.</p>
+                        
+                        <h3>Наші цінності</h3>
+                        <ul class="values-list">
+                            <li><i class="fas fa-heart"></i> Співчуття та турбота</li>
+                            <li><i class="fas fa-handshake"></i> Прозорість у діяльності</li>
+                            <li><i class="fas fa-users"></i> Єдність та взаємодопомога</li>
+                            <li><i class="fas fa-star"></i> Відповідальність за результат</li>
+                        </ul>
+                    </div>
+                    <div class="about-stats">
+                        <div class="stat-item">
+                            <div class="stat-number">1,247</div>
+                            <div class="stat-label">Сімей отримали допомогу</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">5,890,000</div>
+                            <div class="stat-label">Грн надано допомоги</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="stat-number">156</div>
+                            <div class="stat-label">Волонтерів працюють з нами</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Contacts Section -->
+        <section id="contacts" class="section">
+            <div class="container">
+                <h2 class="section-title">Контакти</h2>
+                <div class="contacts-content">
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <i class="fas fa-map-marker-alt"></i>
+                            <div>
+                                <h4>Адреса</h4>
+                                <p>вул. Хрещатик, 1, м. Київ, 01001</p>
+                            </div>
+                        </div>
+                        <div class="contact-item">
+                            <i class="fas fa-phone"></i>
+                            <div>
+                                <h4>Телефон</h4>
+                                <p>+380 44 123 45 67</p>
+                            </div>
+                        </div>
+                        <div class="contact-item">
+                            <i class="fas fa-envelope"></i>
+                            <div>
+                                <h4>Email</h4>
+                                <p>info@tildushi.org.ua</p>
+                            </div>
+                        </div>
+                        <div class="contact-item">
+                            <i class="fas fa-clock"></i>
+                            <div>
+                                <h4>Години роботи</h4>
+                                <p>Пн-Пт: 9:00-18:00<br>Сб-Нд: 10:00-16:00</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="contact-form">
+                        <h3>Зв'яжіться з нами</h3>
+                        <form>
+                            <input type="text" placeholder="Ваше ім'я" required>
+                            <input type="email" placeholder="Email" required>
+                            <input type="tel" placeholder="Телефон">
+                            <textarea placeholder="Повідомлення" rows="5" required></textarea>
+                            <button type="submit" class="btn btn-primary">Надіслати</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Help Modal -->
+    <div id="helpModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('helpModal')">&times;</span>
+            <h2>Як допомогти фонду</h2>
+            <div class="help-options">
+                <div class="payment-methods">
+                    <h3>Банківські реквізити</h3>
+                    <div class="bank-details">
+                        <p><strong>Назва:</strong> Благодійний фонд "Тил Душі"</p>
+                        <p><strong>ЄДРПОУ:</strong> 12345678</p>
+                        <p><strong>Банк:</strong> ПриватБанк</p>
+                        <p><strong>Розрахунковий рахунок:</strong> UA123456789012345678901234567</p>
+                        <p><strong>Призначення платежу:</strong> Благодійний внесок</p>
+                    </div>
+                </div>
+                <div class="online-payments">
+                    <h3>Онлайн платежі</h3>
+                    <div class="payment-buttons">
+                        <button class="payment-btn">
+                            <i class="fab fa-paypal"></i>
+                            PayPal
+                        </button>
+                        <button class="payment-btn">
+                            <i class="fas fa-credit-card"></i>
+                            Банківська картка
+                        </button>
+                        <button class="payment-btn">
+                            <i class="fab fa-bitcoin"></i>
+                            Криптовалюта
+                        </button>
+                    </div>
+                </div>
+                <div class="other-help">
+                    <h3>Інші способи допомоги</h3>
+                    <ul>
+                        <li><i class="fas fa-hands-helping"></i> Волонтерська діяльність</li>
+                        <li><i class="fas fa-box"></i> Пожертвування речей</li>
+                        <li><i class="fas fa-share-alt"></i> Поширення інформації</li>
+                        <li><i class="fas fa-lightbulb"></i> Професійна консультація</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receive Help Modal -->
+    <div id="receiveModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal('receiveModal')">&times;</span>
+            <h2>Заявка на отримання допомоги</h2>
+            <form class="help-form" id="helpRequestForm">
+                <div class="form-group">
+                    <label for="fullName">Повне ім'я *</label>
+                    <input type="text" id="fullName" name="fullName" required>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="phone">Телефон *</label>
+                        <input type="tel" id="phone" name="phone" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="address">Адреса проживання *</label>
+                    <input type="text" id="address" name="address" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="helpType">Тип необхідної допомоги *</label>
+                    <select id="helpType" name="helpType" required>
+                        <option value="">Оберіть тип допомоги</option>
+                        <option value="financial">Фінансова допомога</option>
+                        <option value="medical">Медична допомога</option>
+                        <option value="housing">Житлова допомога</option>
+                        <option value="food">Продуктова допомога</option>
+                        <option value="legal">Юридична допомога</option>
+                        <option value="psychological">Психологічна підтримка</option>
+                        <option value="other">Інше</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="familySize">Склад сім'ї</label>
+                    <input type="number" id="familySize" name="familySize" placeholder="Кількість членів сім'ї">
+                </div>
+                
+                <div class="form-group">
+                    <label for="hasChildren">Чи є діти в сім'ї?</label>
+                    <div class="radio-group">
+                        <label><input type="radio" name="hasChildren" value="yes"> Так</label>
+                        <label><input type="radio" name="hasChildren" value="no"> Ні</label>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="situation">Опис ситуації *</label>
+                    <textarea id="situation" name="situation" rows="5" placeholder="Детально опишіть вашу ситуацію та чому вам потрібна допомога" required></textarea>
+                </div>
+                
+                <div class="form-group">
+                    <label for="documents">Документи, що підтверджують потребу в допомозі</label>
+                    <input type="file" id="documents" name="documents" multiple accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+                    <small>Можна прикріпити декілька файлів (PDF, JPG, PNG, DOC, DOCX)</small>
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" name="consent" required>
+                        Я даю згоду на обробку персональних даних *
+                    </label>
+                </div>
+                
+                <button type="submit" class="btn btn-primary">Подати заявку</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-section">
+                <div class="footer-brand">
+                    <img src="images/logo.png" alt="Тил Душі" class="footer-logo">
+                    <span>Тил Душі</span>
+                </div>
+                    <p>Відроджуємо надію разом</p>
+                </div>
+                <div class="footer-section">
+                    <h4>Швидкі посилання</h4>
+                    <ul>
+                        <li><a href="#reports">Звіти</a></li>
+                        <li><a href="#projects">Проекти</a></li>
+                        <li><a href="#about">Про нас</a></li>
+                        <li><a href="#contacts">Контакти</a></li>
+                    </ul>
+                </div>
+                <div class="footer-section">
+                    <h4>Соціальні мережі</h4>
+                    <div class="social-links">
+                        <a href="#"><i class="fab fa-facebook"></i></a>
+                        <a href="#"><i class="fab fa-instagram"></i></a>
+                        <a href="#"><i class="fab fa-telegram"></i></a>
+                        <a href="#"><i class="fab fa-youtube"></i></a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2024 Благодійний фонд "Тил Душі". Всі права захищені.</p>
+            </div>
+        </div>
+    </footer>
+
+    <script src="js/script.js"></script>
+</body>
+</html>
