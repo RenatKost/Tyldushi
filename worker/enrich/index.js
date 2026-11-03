@@ -2,10 +2,10 @@
 import { query } from '../../server/db.js';
 import { updateOrg } from '../../server/lib/orgs.js';
 import { normalizeCity } from '../geo.js';
-import { extractPage, fetchHtml, readTelegramChannel } from './crawl.js';
+import { extractPage, fetchHtml, hostOf, readTelegramChannel } from './crawl.js';
 import { llmState, structureWithLlm, structureWithRules } from './llm.js';
 import { storeFirstLogo } from './logo.js';
-import { nameTokens, rankResults, searchName, verifySite } from './pick.js';
+import { hostLooksLike, nameTokens, rankResults, searchName, verifySite } from './pick.js';
 import { search } from './search.js';
 
 const MAX_SUBPAGES = 4;
@@ -40,8 +40,9 @@ async function collect(org, log) {
             break;
         }
     }
-    // Sites behind bot protection cannot be crawled; a strong search match is still accepted.
-    if (!site && ranked.websites[0]?.score >= 2.5) site = ranked.websites[0].url;
+    // Sites behind bot protection cannot be crawled; accepted only when the domain itself matches the name.
+    const top = ranked.websites[0];
+    if (!site && top && top.score >= 2.5 && hostLooksLike(hostOf(top.url), ranked.tokens)) site = top.url;
 
     if (pages.length) {
         for (const sub of pages[0].subpages.slice(0, MAX_SUBPAGES)) {

@@ -60,18 +60,33 @@
     function displayName(org) {
         if (org.short_name) return org.short_name.replace(/^[«"]+|[»"]+$/g, '').trim();
         const name = String(org.name || '');
-        const quoted = [...name.matchAll(/«([^«»]+)»/g)].map(m => m[1].trim()).filter(Boolean);
-        let core = quoted.length ? quoted[quoted.length - 1] : name.replace(/[«»"]/g, '');
-        for (let i = 0; i < 3 && LEGAL_PREFIX.test(core); i++) core = core.replace(LEGAL_PREFIX, '');
-        core = core.trim() || name;
+        const stripLegal = s => {
+            let out = s.replace(/[«»"]/g, ' ').replace(/\s+/g, ' ').trim();
+            for (let i = 0; i < 4 && LEGAL_PREFIX.test(`${out} `); i++) out = `${out} `.replace(LEGAL_PREFIX, '').trim();
+            return out;
+        };
+        // The innermost quoted part is the organization's own name (works with unbalanced quotes too).
+        const open = name.lastIndexOf('«');
+        let core = stripLegal(open >= 0 ? name.slice(open + 1).split('»')[0] : name);
+        if (!core) core = stripLegal(name) || name;
         return core.charAt(0).toUpperCase() + core.slice(1);
     }
 
-    /** Drops a leading "Фонд «X» — це" that repeats the title, so the excerpt starts with substance. */
+    const REGISTRY_SENTENCE = /зареєстрован|ЄДРПОУ|ідентифікаційн|юридичн\S* особ|неприбутков|код\s+\d/i;
+
+    /** Skips opening sentences that repeat the name or registry facts, so the excerpt starts with substance. */
     function cleanExcerpt(text, title) {
-        let t = String(text || '').trim();
-        const m = t.match(/^([^.!?]{0,180}?)\s[—–-]\s(це\s+)?/);
-        if (m && m[1].toLowerCase().includes(title.toLowerCase().slice(0, 12))) t = t.slice(m[0].length);
+        let sentences = String(text || '').trim().split(/(?<=[.!?…])\s+/);
+        const head = title.toLowerCase().slice(0, 12);
+        while (sentences.length > 1 && (REGISTRY_SENTENCE.test(sentences[0]) || sentences[0].toLowerCase().includes(head))) {
+            const m = sentences[0].match(/^([^.!?]{0,180}?)\s[—–-]\s(це\s+)?(.+)$/);
+            if (m && !REGISTRY_SENTENCE.test(m[3]) && m[1].toLowerCase().includes(head)) {
+                sentences[0] = m[3];
+                break;
+            }
+            sentences = sentences.slice(1);
+        }
+        const t = sentences.join(' ');
         return t.charAt(0).toUpperCase() + t.slice(1);
     }
 

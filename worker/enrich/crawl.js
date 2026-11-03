@@ -166,6 +166,8 @@ export function extractPage({ url, html }) {
     const description = $('meta[name="description"]').attr('content')?.trim()
         || $('meta[property="og:description"]').attr('content')?.trim() || '';
     const logos = findLogoCandidates($, abs);
+    const siteName = $('meta[property="og:site_name"]').attr('content')?.trim() || '';
+    const headings = $('h1').map((_, el) => $(el).text().replace(/\s+/g, ' ').trim()).get().filter(Boolean).slice(0, 2);
 
     const links = [];
     const socials = {};
@@ -216,6 +218,8 @@ export function extractPage({ url, html }) {
         title,
         description,
         logos,
+        siteName,
+        headings,
         text,
         links,
         subpages,

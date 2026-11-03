@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { normalizeCategories } from '../server/lib/categories.js';
 import { slugify } from '../server/lib/slug.js';
-import { rankResults, nameTokens, searchName, verifySite } from '../worker/enrich/pick.js';
+import { hostLooksLike, rankResults, nameTokens, searchName, verifySite } from '../worker/enrich/pick.js';
 import { extractPage } from '../worker/enrich/crawl.js';
 import { guessLocation } from '../worker/geo.js';
 import { prettifyName } from '../worker/registry.js';
@@ -30,6 +30,20 @@ test('prettifyName fixes case, quotes and apostrophes', () => {
     assert.equal(prettifyName('БЛАГОДІЙНА ОРГАНІЗАЦІЯ "БЛАГОДІЙНИЙ ФОНД "СКАУТИ МИКОЛАЄВА""'),
         'Благодійна організація «Благодійний фонд «Скаути Миколаєва»»');
     assert.equal(prettifyName('ГРОМАДСЬКА ОРГАНІЗАЦІЯ "ВОЛОНТЕРИ М. КИЄВА"'), 'Громадська організація «Волонтери м. Києва»');
+});
+
+test('a news site mentioning the fund is not accepted as its website', () => {
+    const org = { name: 'Благодійний фонд «Добре серце Запоріжжя»', edrpou: '45283468' };
+    const tokens = nameTokens(org.name);
+    const news = {
+        url: 'https://www.soda.zp.ua/', title: 'SODA — медіа Запоріжжя', description: 'Новини міста', siteName: 'SODA',
+        headings: ['Головне'], text: 'Фонд «Добре серце Запоріжжя» передав генератори лікарні…',
+    };
+    assert.ok(verifySite(org, news, tokens) < 0.6);
+    const own = { ...news, url: 'https://dobreserce.zp.ua/', title: 'Добре серце Запоріжжя — благодійний фонд', siteName: '' };
+    assert.ok(verifySite(org, own, tokens) >= 0.6);
+    assert.equal(hostLooksLike('dobreserce.zp.ua', tokens), true);
+    assert.equal(hostLooksLike('zvitnist.com', tokens), false);
 });
 
 test('search uses the innermost quoted part of the name', () => {

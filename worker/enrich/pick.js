@@ -1,9 +1,10 @@
 // Chooses the official website and social profiles of an organization among search results.
+import { slugify } from '../../server/lib/slug.js';
 import { coreName } from '../names.js';
 import { hostOf, socialKind } from './crawl.js';
 
 // Registries, aggregators and catalogs: useful as confirmation, never the organization's own site.
-const AGGREGATORS = /(opendatabot|youcontrol|clarity-project|ring\.org|edr\.|vkursi|kompass|rusprofile|zakon\.rada|prozorro|dozorro|010\.ua|008\.ua|ua-region|ua\.all-biz|catalog|spravochnik|businessguide|minjust|data\.gov|wikipedia|wikidata|google\.|goo\.gl|maps\.|linkedin|twitter\.com|x\.com|pinterest|olx|prom\.ua|rozetka|zhitlo|biz\.ligazakon|nais\.gov|tax\.gov|e-data|smida|charity\.in\.ua|gromada|decentralization|irs\.gov|dovidnyk|infopro|ua\.kompanii|kompanii|firms\.|company\.|companies\.|clarity|youscore|checkfirm|sumy-index|yellowpages|golden-pages|zoon|2gis|vsetovary|uaprom|tender)/i;
+const AGGREGATORS = /(opendatabot|youcontrol|clarity-project|ring\.org|edr\.|vkursi|kompass|rusprofile|zakon\.rada|prozorro|dozorro|010\.ua|008\.ua|ua-region|ua\.all-biz|catalog|spravochnik|businessguide|minjust|data\.gov|wikipedia|wikidata|google\.|goo\.gl|maps\.|linkedin|twitter\.com|x\.com|pinterest|olx|prom\.ua|rozetka|zhitlo|biz\.ligazakon|nais\.gov|tax\.gov|e-data|smida|charity\.in\.ua|gromada|decentralization|irs\.gov|dovidnyk|infopro|ua\.kompanii|kompanii|firms\.|company\.|companies\.|clarity|youscore|checkfirm|sumy-index|yellowpages|golden-pages|zoon|2gis|vsetovary|uaprom|tender|zvitnist|liqpay|monobank|privat24|privatbank|fondy|wayforpay|portmone|platon|dobro\.ua|gofundme|patreon|buymeacoffee|linktr\.ee|taplink|history\.org\.ua|reyestr|ukrstat|spending|nashigroshi|opencorporates|bizzy|ua\.biz|gov\.ua|court)/i;
 
 // Big media and portals: articles may be good case sources but are not the official site.
 const MEDIA = /(pravda\.com\.ua|ukrinform|unian|tsn\.ua|rbc\.ua|nv\.ua|suspilne|radiosvoboda|bbc\.|lb\.ua|hromadske|focus\.ua|censor|obozrevatel|segodnya|zn\.ua|gazeta\.ua|24tv|glavcom|ain\.ua|dou\.ua|youtube|facebook|instagram|t\.me|tiktok|gov\.ua)/i;
@@ -53,12 +54,16 @@ export function rankResults(org, results) {
         }
         const kind = socialKind(r.url);
         if (kind) {
-            if (match >= 0.5 && !socials[kind]) socials[kind] = r.url.replace(/\?.*$/, '');
+            // The profile title itself must carry the name, not just a post that mentions it.
+            if (tokenScore(r.title || '', tokens) >= 0.6 && !socials[kind]) socials[kind] = r.url.replace(/\?.*$/, '');
             continue;
         }
         if (MEDIA.test(host)) continue;
-        const score = match * 2 + (hasCode ? 3 : 0) + (/фонд|благодій|громадськ|волонтер|допомог/i.test(blob) ? 0.5 : 0);
-        if (match < 0.5 && !hasCode) continue;
+        const domainMatch = hostLooksLike(host, tokens);
+        const titleMatch = tokenScore(r.title || '', tokens);
+        const score = titleMatch * 2 + (domainMatch ? 2 : 0) + (hasCode ? 1 : 0)
+            + (/фонд|благодій|громадськ|волонтер|допомог/i.test(blob) ? 0.5 : 0);
+        if (match < 0.5 || (titleMatch < 0.6 && !domainMatch)) continue;
         const prev = sites.get(host);
         const origin = (() => { try { return new URL(r.url).origin; } catch { return null; } })();
         if (origin && (!prev || prev.score < score)) sites.set(host, { url: origin, score, snippet: r });
@@ -72,9 +77,26 @@ export function rankResults(org, results) {
     };
 }
 
-/** Confirms that a fetched homepage belongs to the organization. */
+/** True when the domain looks like a transliteration of the organization's name. */
+export function hostLooksLike(host, tokens) {
+    const compact = String(host).replace(/[^a-z0-9]/g, '');
+    return tokens.some(t => {
+        const slug = slugify(t).replace(/-/g, '');
+        return slug.length >= 4 && compact.includes(slug.slice(0, Math.min(slug.length, 6)));
+    });
+}
+
+/**
+ * Confirms that a fetched homepage belongs to the organization. Words from the name somewhere in
+ * the text are not enough (news sites and catalogs mention many funds): the page must present
+ * itself as the organization — name in the title, description, site name or main heading, its
+ * own registry code, or a domain derived from the name.
+ */
 export function verifySite(org, page, tokens) {
-    const text = `${page.title}\n${page.description}\n${page.text}`;
-    if (org.edrpou && text.includes(org.edrpou)) return 1;
-    return tokenScore(text.slice(0, 20000), tokens);
+    const identity = [page.title, page.description, page.siteName, ...(page.headings || [])].filter(Boolean).join('\n');
+    if (org.edrpou && `${identity}\n${page.text || ''}`.includes(org.edrpou)) return 1;
+    const idScore = tokenScore(identity, tokens);
+    if (idScore >= 0.6) return idScore;
+    if (page.url && hostLooksLike(hostOf(page.url), tokens) && tokenScore((page.text || '').slice(0, 5000), tokens) >= 0.6) return 0.7;
+    return Math.min(0.3, idScore);
 }

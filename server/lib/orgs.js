@@ -10,7 +10,7 @@ const PUBLIC_ORDER = 'is_featured DESC, featured_rank ASC NULLS LAST, name ASC';
 const LIST_COLUMNS = `id, slug, edrpou, name, short_name, org_type, city, region, help_categories,
     logo_url, is_featured, featured_rank, status, updated_at, contacts,
     (SELECT count(*)::int FROM organization_cases c WHERE c.organization_id = organizations.id) AS cases_count,
-    left(coalesce(description, ''), 320) AS excerpt`;
+    left(coalesce(description, ''), 600) AS excerpt`;
 
 function str(value, max = 5000) {
     if (value === undefined || value === null) return null;

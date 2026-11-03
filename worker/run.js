@@ -9,6 +9,7 @@ import { migrate, pool, query } from '../server/db.js';
 import { sendModerationCard, telegramEnabled } from '../server/telegram.js';
 import { enrichBatch, refreshLogos } from './enrich/index.js';
 import { searchConfigured } from './enrich/search.js';
+import { prettifyName } from './names.js';
 import { importRegistry } from './registry.js';
 
 const LOCK_ID = 727274; // pg advisory lock: prevents overlapping cron runs
@@ -69,6 +70,18 @@ async function runEnrich() {
     return track('enrich', () => enrichBatch({ limit, ids, onPending }));
 }
 
+/** Re-formats names that an older parser left with broken quotes (cheap, runs every time). */
+async function repairNames() {
+    const { rows } = await query(
+        `SELECT id, name FROM organizations WHERE status <> 'registry' AND name ~ '(\\s»|«\\s*$|")' LIMIT 500`,
+    );
+    for (const row of rows) {
+        const fixed = prettifyName(row.name);
+        if (fixed !== row.name) await query('UPDATE organizations SET name = $2 WHERE id = $1', [row.id, fixed]);
+    }
+    if (rows.length) console.log(`[names] repaired ${rows.length}`);
+}
+
 async function runLogos() {
     const limit = arg('limit') ? Number(arg('limit')) : 50;
     return track('logos', () => refreshLogos({ limit }));
@@ -109,6 +122,7 @@ async function main() {
         // A failed registry download must not block enrichment of what is already imported.
         await runImport().catch(err => console.error('[import] failed', err.message));
     }
+    if (command === 'all') await repairNames().catch(err => console.error('[names] failed', err.message));
     if (command === 'logos' || command === 'all') await runLogos().catch(err => console.error('[logos] failed', err.message));
     if (command === 'enrich' || command === 'all') await runEnrich();
     if (command === 'notify' || command === 'all') await runNotify();
