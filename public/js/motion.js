@@ -29,6 +29,16 @@
 
     gsap.defaults({ ease: 'power3.out', duration: 0.8 });
 
+    // quickTo creates its tween immediately and overwrites running tweens of the same element
+    // (e.g. the hero buttons' intro), so it is only created on the first pointer move.
+    function lazyQuickTo(target, prop, vars) {
+        let fn = null;
+        return value => {
+            fn ??= gsap.quickTo(target, prop, vars);
+            fn(value);
+        };
+    }
+
     /* ---------- Global: scroll progress + header state ---------- */
     function initChrome() {
         const bar = document.createElement('div');
@@ -76,12 +86,20 @@
             });
             tl.from(split.words, { yPercent: 110, duration: 1.1, stagger: 0.06 });
         } else if (heading) {
-            tl.from(heading, { y: 40, autoAlpha: 0 });
+            tl.fromTo(heading, { y: 40, autoAlpha: 0 }, { y: 0, autoAlpha: 1 });
         }
 
-        if (subtitle) tl.from(subtitle, { y: 24, autoAlpha: 0, duration: 0.9 }, '-=0.7');
-        if (buttons.length) tl.from(buttons, { y: 24, autoAlpha: 0, scale: 0.94, stagger: 0.12, duration: 0.7 }, '-=0.6');
-        if (image) tl.from(image, { scale: 0.6, rotate: -8, autoAlpha: 0, duration: 1.4, ease: 'elastic.out(1, 0.75)' }, 0.2);
+        // Explicit end values: buttons have a CSS "transition: all", so a from() tween could read a
+        // half-faded opacity as its end value and leave them invisible.
+        if (subtitle) tl.fromTo(subtitle, { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9 }, '-=0.7');
+        if (buttons.length) {
+            gsap.set(buttons, { transition: 'none' });
+            tl.fromTo(buttons,
+                { y: 24, autoAlpha: 0, scale: 0.94 },
+                { y: 0, autoAlpha: 1, scale: 1, stagger: 0.12, duration: 0.7, clearProps: 'transform,opacity,visibility,transition' },
+                '-=0.6');
+        }
+        if (image) tl.fromTo(image, { scale: 0.6, rotate: -8, autoAlpha: 0 }, { scale: 1, rotate: 0, autoAlpha: 1, duration: 1.4, ease: 'elastic.out(1, 0.75)' }, 0.2);
         if (glow) tl.from(glow, { scale: 0.2, autoAlpha: 0, duration: 1.6 }, 0.3);
 
         // Decorative orbs drift with the mouse and scroll at different depths.
@@ -120,9 +138,9 @@
         // Logo follows the pointer slightly (desktop only).
         const container = hero.querySelector('.hero-logo-container');
         if (isDesktop && container) {
-            const xTo = gsap.quickTo(container, 'x', { duration: 0.8, ease: 'power3' });
-            const yTo = gsap.quickTo(container, 'y', { duration: 0.8, ease: 'power3' });
-            const rTo = gsap.quickTo(container, 'rotationY', { duration: 0.8, ease: 'power3' });
+            const xTo = lazyQuickTo(container, 'x', { duration: 0.8, ease: 'power3' });
+            const yTo = lazyQuickTo(container, 'y', { duration: 0.8, ease: 'power3' });
+            const rTo = lazyQuickTo(container, 'rotationY', { duration: 0.8, ease: 'power3' });
             gsap.set(container, { transformPerspective: 900 });
             hero.addEventListener('mousemove', e => {
                 const rect = hero.getBoundingClientRect();
@@ -146,8 +164,8 @@
             const split = SplitText.create(title, { type: 'lines,words', mask: 'lines', linesClass: 'split-line' });
             tl.from(split.words, { yPercent: 110, duration: 1, stagger: 0.04 });
         }
-        tl.from(hero.querySelectorAll('.orgs-eyebrow, .orgs-lead, .orgs-stats'), { y: 30, autoAlpha: 0, stagger: 0.12, duration: 0.8 }, 0.1);
-        tl.from('.orgs-filters, .orgs-chips', { y: 30, autoAlpha: 0, stagger: 0.1, duration: 0.8 }, 0.4);
+        tl.fromTo(hero.querySelectorAll('.orgs-eyebrow, .orgs-lead, .orgs-stats'), { y: 30, autoAlpha: 0 }, { y: 0, autoAlpha: 1, stagger: 0.12, duration: 0.8 }, 0.1);
+        tl.fromTo('.orgs-filters, .orgs-chips', { y: 30, autoAlpha: 0 }, { y: 0, autoAlpha: 1, stagger: 0.1, duration: 0.8, clearProps: 'transform' }, 0.4);
         hero.querySelectorAll('.hero-orb').forEach((orb, i) => {
             gsap.to(orb, { x: 'random(-50, 50)', y: 'random(-30, 30)', duration: 7 + i * 2, ease: 'sine.inOut', repeat: -1, yoyo: true, repeatRefresh: true });
         });
@@ -165,7 +183,7 @@
                 const split = SplitText.create(title, { type: 'words', mask: 'words' });
                 tl.from(split.words, { yPercent: 100, duration: 0.9, stagger: 0.07 });
             } else {
-                tl.from(title, { y: 30, autoAlpha: 0 });
+                tl.fromTo(title, { y: 30, autoAlpha: 0 }, { y: 0, autoAlpha: 1 });
             }
             tl.to(title, { '--line-scale': 1, duration: 0.8, ease: 'expo.out' }, '-=0.5');
         });
@@ -176,7 +194,7 @@
         const list = gsap.utils.toArray(elements);
         if (!list.length) return;
         if (!hasST) {
-            gsap.from(list, { y: 30, autoAlpha: 0, stagger: 0.06 });
+            gsap.fromTo(list, { y: 30, autoAlpha: 0 }, { y: 0, autoAlpha: 1, stagger: 0.06, clearProps: 'transform' });
             return;
         }
         gsap.set(list, { y: 50, autoAlpha: 0, scale: 0.97 });
@@ -196,8 +214,8 @@
             if (card.dataset.tilt) return;
             card.dataset.tilt = '1';
             gsap.set(card, { transformPerspective: 800 });
-            const rx = gsap.quickTo(card, 'rotationX', { duration: 0.5, ease: 'power3' });
-            const ry = gsap.quickTo(card, 'rotationY', { duration: 0.5, ease: 'power3' });
+            const rx = lazyQuickTo(card, 'rotationX', { duration: 0.5, ease: 'power3' });
+            const ry = lazyQuickTo(card, 'rotationY', { duration: 0.5, ease: 'power3' });
             card.addEventListener('mousemove', e => {
                 const r = card.getBoundingClientRect();
                 ry(((e.clientX - r.left) / r.width - 0.5) * 8);
@@ -225,8 +243,8 @@
         });
 
         document.querySelectorAll('.progress').forEach(bar => {
-            gsap.from(bar, {
-                width: 0,
+            gsap.fromTo(bar, { width: 0 }, {
+                width: bar.style.width || '100%',
                 duration: 1.8,
                 ease: 'power2.inOut',
                 scrollTrigger: { trigger: bar, start: 'top 90%', once: true },
@@ -239,8 +257,8 @@
         if (!isDesktop) return;
         document.querySelectorAll('.hero-buttons .btn, .btn-primary, .btn-magnetic').forEach(btn => {
             btn.classList.add('is-magnetic');
-            const xTo = gsap.quickTo(btn, 'x', { duration: 0.4, ease: 'power3' });
-            const yTo = gsap.quickTo(btn, 'y', { duration: 0.4, ease: 'power3' });
+            const xTo = lazyQuickTo(btn, 'x', { duration: 0.4, ease: 'power3' });
+            const yTo = lazyQuickTo(btn, 'y', { duration: 0.4, ease: 'power3' });
             btn.addEventListener('mousemove', e => {
                 const r = btn.getBoundingClientRect();
                 xTo((e.clientX - r.left - r.width / 2) * 0.25);
@@ -260,7 +278,7 @@
                 { y: 60, scale: 0.92, autoAlpha: 0 },
                 { y: 0, scale: 1, autoAlpha: 1, duration: 0.55, ease: 'back.out(1.4)' });
             const items = content.querySelectorAll('h2, h3, .form-group, .bank-details, .payment-btn, li');
-            gsap.from(items, { y: 16, autoAlpha: 0, stagger: 0.025, duration: 0.4, delay: 0.15 });
+            gsap.fromTo(items, { y: 16, autoAlpha: 0 }, { y: 0, autoAlpha: 1, stagger: 0.025, duration: 0.4, delay: 0.15, clearProps: 'transform,opacity,visibility' });
         }
     }
 

@@ -147,6 +147,20 @@ html.js-motion .hero-image {
     }
 }
 
+/* The closed mobile menu is moved above the screen, but its white panel and last item used to
+   cover the logo in the header; hide it completely while closed. */
+@media (max-width: 768px) {
+    .nav-menu:not(.active) {
+        visibility: hidden;
+        transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), visibility 0s linear 0.3s;
+    }
+
+    .nav-menu.active {
+        visibility: visible;
+        transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), visibility 0s;
+    }
+}
+
 @media (prefers-reduced-motion: reduce) {
     .hero-logo,
     .logo-glow {

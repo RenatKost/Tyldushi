@@ -356,8 +356,8 @@
             els.detail.style.setProperty('--accent', ACCENTS[primary] || DEFAULT_ACCENT);
             document.title = `${displayName(org)}${org.city ? ` — ${org.city}` : ''} | Тил Душі`;
             if (hasGsap) {
-                gsap.from(els.detail.querySelectorAll('[data-anim]'), { y: 40, autoAlpha: 0, duration: 0.8, stagger: 0.1, ease: 'power3.out' });
-                gsap.from(els.detail.querySelectorAll('.org-help-item, .org-case, .org-contact'), { y: 16, autoAlpha: 0, duration: 0.5, stagger: 0.04, delay: 0.3 });
+                gsap.fromTo(els.detail.querySelectorAll('[data-anim]'), { y: 40, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, stagger: 0.1, ease: 'power3.out', clearProps: 'transform' });
+                gsap.fromTo(els.detail.querySelectorAll('.org-help-item, .org-case, .org-contact'), { y: 16, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.04, delay: 0.3, clearProps: 'transform,opacity,visibility' });
             }
         } catch {
             els.detail.innerHTML = `<div class="container orgs-empty"><i class="fas fa-circle-exclamation"></i><h3>Організацію не знайдено</h3><p><a href="/organizations">Повернутися до каталогу</a></p></div>`;
