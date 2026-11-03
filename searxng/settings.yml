@@ -1,0 +1,36 @@
+# SearXNG for the tyldushi worker: reachable only over Railway private networking.
+use_default_settings: true
+
+general:
+  instance_name: "tyldushi-search"
+
+server:
+  # Overridden by the SEARXNG_SECRET environment variable on Railway.
+  secret_key: "change-me"
+  limiter: false
+  image_proxy: false
+  public_instance: false
+
+search:
+  safe_search: 0
+  default_lang: "uk-UA"
+  formats:
+    - html
+    - json
+
+ui:
+  static_use_hash: true
+
+engines:
+  - name: duckduckgo
+    disabled: false
+  - name: bing
+    disabled: false
+  - name: brave
+    disabled: false
+  - name: mojeek
+    disabled: false
+  - name: google
+    disabled: false
+  - name: startpage
+    disabled: false
