@@ -65,7 +65,7 @@ test('extractPage finds contacts, socials and verifies the site', () => {
     assert.deepEqual(page.emails, ['info@voices.org.ua']);
     assert.equal(page.socials.telegram, 'https://t.me/voices_channel');
     assert.equal(page.socials.facebook, undefined);
-    assert.equal(page.logo, 'https://voices.org.ua/logo.png');
+    assert.deepEqual(page.logos, ['https://voices.org.ua/logo.png']);
     assert.deepEqual(page.subpages.map(s => s.url), ['https://voices.org.ua/about-us', 'https://voices.org.ua/news']);
     assert.equal(verifySite({ name: 'x', edrpou: '41117015' }, page, []), 1);
 });
