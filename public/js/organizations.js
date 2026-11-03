@@ -167,25 +167,22 @@
     }
 
     function renderList(items, append) {
-        const flipState = hasFlip && !append ? Flip.getState(els.grid.querySelectorAll('.org-card')) : null;
-        const before = new Set([...els.grid.querySelectorAll('.org-card')].map(c => c.dataset.flipId));
+        const existing = [...els.grid.querySelectorAll('.org-card')];
+        // Flip only when filtering an already rendered grid; the first render uses the scroll reveal.
+        const flipState = hasFlip && !append && existing.length ? Flip.getState(existing) : null;
+        const before = new Set(existing.map(c => c.dataset.flipId));
 
         if (append) els.grid.insertAdjacentHTML('beforeend', items.map(cardHtml).join(''));
         else els.grid.innerHTML = items.map(cardHtml).join('');
 
         const cards = [...els.grid.querySelectorAll('.org-card')];
         const fresh = cards.filter(c => !before.has(c.dataset.flipId));
+        const kept = cards.filter(c => before.has(c.dataset.flipId));
 
         if (flipState) {
-            Flip.from(flipState, {
-                targets: cards,
-                duration: 0.6,
-                ease: 'power3.inOut',
-                absolute: true,
-                stagger: 0.02,
-                onEnter: entering => gsap.fromTo(entering, { autoAlpha: 0, y: 30, scale: 0.96 }, { autoAlpha: 1, y: 0, scale: 1, duration: 0.6, stagger: 0.04 }),
-                onLeave: leaving => gsap.to(leaving, { autoAlpha: 0, scale: 0.9, duration: 0.3 }),
-            });
+            // Cards stay in the normal flow (no absolute positioning), so the grid keeps its height.
+            if (kept.length) Flip.from(flipState, { targets: kept, duration: 0.55, ease: 'power3.inOut', scale: false });
+            if (fresh.length) gsap.fromTo(fresh, { autoAlpha: 0, y: 24 }, { autoAlpha: 1, y: 0, duration: 0.5, stagger: 0.04, clearProps: 'transform' });
         } else if (hasGsap && fresh.length) {
             window.Motion.revealCards(fresh);
         }
@@ -226,17 +223,17 @@
     }
 
     async function loadMeta() {
-        const [cats, cities] = await Promise.all([
+        const [cats, cities, all] = await Promise.all([
             getJSON(`${API}/categories`).catch(() => []),
             getJSON(`${API}/cities`).catch(() => []),
+            getJSON(`${API}/organizations?limit=1`).catch(() => ({ total: 0 })),
         ]);
         categories = cats;
         renderChips();
         els.city.insertAdjacentHTML('beforeend', cities
             .map(c => `<option value="${esc(c.city)}">${esc(c.city)} (${c.count})</option>`).join(''));
 
-        const totalOrgs = cities.reduce((sum, c) => sum + c.count, 0);
-        animateStat('total', totalOrgs);
+        animateStat('total', all.total);
         animateStat('cities', cities.length);
     }
 
