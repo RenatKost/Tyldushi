@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { normalizeCategories } from '../server/lib/categories.js';
 import { slugify } from '../server/lib/slug.js';
-import { rankResults, nameTokens, verifySite } from '../worker/enrich/pick.js';
+import { rankResults, nameTokens, searchName, verifySite } from '../worker/enrich/pick.js';
 import { extractPage } from '../worker/enrich/crawl.js';
 import { guessLocation } from '../worker/geo.js';
 import { prettifyName } from '../worker/registry.js';
@@ -27,6 +27,15 @@ test('prettifyName fixes case, quotes and apostrophes', () => {
     assert.equal(prettifyName('БЛАГОДІЙНИЙ ФОНД "ЛЮДИ ДОБРА"'), 'Благодійний фонд «Люди добра»');
     assert.equal(prettifyName('ВСЕУКРАЇНСЬКЕ ОБ"ЄДНАННЯ ВЕТЕРАНІВ ЗСУ'), 'Всеукраїнське об’єднання ветеранів ЗСУ');
     assert.equal(prettifyName('Already Pretty'), 'Already Pretty');
+    assert.equal(prettifyName('БЛАГОДІЙНА ОРГАНІЗАЦІЯ "БЛАГОДІЙНИЙ ФОНД "СКАУТИ МИКОЛАЄВА""'),
+        'Благодійна організація «Благодійний фонд «Скаути Миколаєва»»');
+    assert.equal(prettifyName('ГРОМАДСЬКА ОРГАНІЗАЦІЯ "ВОЛОНТЕРИ М. КИЄВА"'), 'Громадська організація «Волонтери м. Києва»');
+});
+
+test('search uses the innermost quoted part of the name', () => {
+    const name = 'Благодійна організація «Благодійний фонд «Скаути Миколаєва»»';
+    assert.equal(searchName({ name }), 'Скаути Миколаєва');
+    assert.deepEqual(nameTokens(name), ['СКАУТИ', 'МИКОЛАЄВА']);
 });
 
 test('rankResults separates official site, socials and registries', () => {

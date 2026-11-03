@@ -1,4 +1,5 @@
 // Chooses the official website and social profiles of an organization among search results.
+import { coreName } from '../names.js';
 import { hostOf, socialKind } from './crawl.js';
 
 // Registries, aggregators and catalogs: useful as confirmation, never the organization's own site.
@@ -11,19 +12,17 @@ const GENERIC = new Set(['БЛАГОДІЙНА', 'БЛАГОДІЙНИЙ', 'ОР
     'ВСЕУКРАЇНСЬКА', 'ВСЕУКРАЇНСЬКИЙ', 'УКРАЇНСЬКА', 'УКРАЇНСЬКИЙ', 'СПІЛКА', 'ОБЛАСНА', 'МІСЬКА', 'РАЙОННА', 'ВІДДІЛЕННЯ',
     'ЦЕНТР', 'АСОЦІАЦІЯ', 'ОБ’ЄДНАННЯ', 'ОБ\'ЄДНАННЯ', 'КИЇВСЬКА', 'ЛЬВІВСЬКА', 'ХАРКІВСЬКА', 'ОДЕСЬКА', 'НАЦІОНАЛЬНА']);
 
-/** Words that identify the organization: the quoted part of the name if present, otherwise rare words. */
+const words = text => String(text).toUpperCase().split(/[^А-ЯІЇЄҐA-Z0-9’']+/).filter(w => w.length >= 3 && !GENERIC.has(w));
+
+/** Words that identify the organization: the innermost quoted part of the name, otherwise rare words. */
 export function nameTokens(name) {
-    const upper = String(name || '').toUpperCase();
-    const quoted = upper.match(/[«"]([^»"]+)[»"]/);
-    const source = quoted ? quoted[1] : upper;
-    return source.split(/[^А-ЯІЇЄҐA-Z0-9’']+/).filter(w => w.length >= 3 && !GENERIC.has(w));
+    const core = words(coreName(name));
+    return core.length ? core : words(name);
 }
 
-/** Search-friendly name: quoted part if present, otherwise the full name without legal form words. */
+/** Search-friendly name: the innermost quoted part if present, otherwise the full name. */
 export function searchName(org) {
-    const name = org.short_name || org.name || '';
-    const quoted = name.match(/[«"]([^»"]+)[»"]/);
-    return quoted ? quoted[1] : name;
+    return coreName(org.name || org.short_name || '').replace(/[«»"]/g, '');
 }
 
 function tokenScore(text, tokens) {

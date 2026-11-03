@@ -10,6 +10,9 @@ import unzipper from 'unzipper';
 import { query } from '../server/db.js';
 import { slugify } from '../server/lib/slug.js';
 import { guessLocation } from './geo.js';
+import { prettifyName } from './names.js';
+
+export { prettifyName };
 
 const DATASET_ID = '03cc1239-3988-4451-aa0d-aadb77448714';
 const RESOURCE_NAME = 'UO.zip';
@@ -49,22 +52,6 @@ function headName(record) {
         if (/керівник/i.test(text)) return text.split(/\s+-\s+|;/)[0].trim();
     }
     return null;
-}
-
-const ABBREVIATIONS = new Set(['ОУН', 'ЗСУ', 'ВПО', 'АТО', 'ООС', 'ТЦК', 'ДСНС', 'НГУ', 'СБУ', 'УБД', 'ВІЛ', 'СНІД',
-    'ЮНІСЕФ', 'ООН', 'ЄС', 'США', 'ГО', 'БФ', 'МБФ', 'ВГО', 'ВБФ', 'ЛГБТ', 'IT', 'НАТО', 'ОСББ', 'ТРО', 'ДФТГ', 'ЮА', 'UA']);
-
-/** "БЛАГОДІЙНИЙ ФОНД "ЛЮДИ ДОБРА"" → "Благодійний фонд «Люди добра»" */
-export function prettifyName(name) {
-    if (!name || name !== name.toUpperCase()) return name;
-    const letter = /[А-ЯІЇЄҐA-Z]/;
-    // The registry writes apostrophes as double quotes: ОБ"ЄДНАННЯ.
-    let s = name.replace(/"/g, (q, i, str) => (letter.test(str[i - 1] || '') && letter.test(str[i + 1] || '') ? '’' : q));
-    let open = false;
-    s = s.replace(/"/g, () => ((open = !open) ? '«' : '»'));
-    s = s.replace(/[А-ЯІЇЄҐA-Z’']+/g, word => (ABBREVIATIONS.has(word) ? word : word.toLowerCase()));
-    // Capitalize the very first letter and the first letter inside quotes.
-    return s.replace(/^\s*[а-яіїєґa-z]/, c => c.toUpperCase()).replace(/«\s*([а-яіїєґa-z])/g, (m, c) => `«${c.toUpperCase()}`);
 }
 
 function priorityOf(org) {
