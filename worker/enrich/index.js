@@ -4,7 +4,8 @@ import { updateOrg } from '../../server/lib/orgs.js';
 import { normalizeCity } from '../geo.js';
 import { extractPage, fetchHtml, readTelegramChannel } from './crawl.js';
 import { llmState, structureWithLlm, structureWithRules } from './llm.js';
-import { rankResults, searchName, verifySite } from './pick.js';
+import { storeFirstLogo } from './logo.js';
+import { nameTokens, rankResults, searchName, verifySite } from './pick.js';
 import { search } from './search.js';
 
 const MAX_SUBPAGES = 4;
@@ -59,7 +60,21 @@ async function collect(org, log) {
         .filter(r => ranked.tokens.length && ranked.tokens.some(t => `${r.title} ${r.content}`.toUpperCase().includes(t)))
         .slice(0, 10);
 
-    return { site, pages, socials, telegram, snippets, confirmations: ranked.confirmations };
+    return { site, pages, socials, telegram, snippets, confirmations: ranked.confirmations, tokens: ranked.tokens };
+}
+
+/**
+ * Logo sources, most reliable first: the verified official site, then the avatar of a Telegram
+ * channel that is either linked from that site or clearly carries the organization's name.
+ */
+async function findLogo(org, { pages, telegram, tokens }) {
+    const candidates = pages.flatMap(p => p.logos || []);
+    if (telegram?.photo) {
+        const linkedFromSite = pages.some(p => p.socials.telegram && p.socials.telegram.includes(telegram.url.split('/').pop()));
+        const titled = verifySite(org, { title: telegram.title, description: telegram.description, text: '' }, tokens) >= 0.6;
+        if (linkedFromSite || titled) candidates.push(telegram.photo);
+    }
+    return candidates.length ? storeFirstLogo([...new Set(candidates)]) : null;
 }
 
 function buildMaterials({ pages, telegram, snippets }) {
@@ -142,15 +157,17 @@ export async function enrichOne(org, log = console.log) {
     };
     if (profile.short_name && !org.short_name) patch.short_name = profile.short_name;
     if (!org.city && profile.city) patch.city = normalizeCity(profile.city);
-    const logo = sitePages[0]?.logo;
-    if (logo && !org.logo_url) patch.logo_url = logo;
+    if (!org.logo_url) {
+        const logo = await findLogo(org, found);
+        if (logo) patch.logo_url = logo;
+    }
 
     await updateOrg(org.id, patch);
 
     const confidence = Math.max(0, Math.min(1, Number(profile.confidence) || 0));
     const status = confidence < 0.3 || !profile.description ? 'rejected_auto' : 'pending';
     await query(
-        `UPDATE organizations SET status = $2, sources = $3, ai_confidence = $4, enriched_at = now(),
+        `UPDATE organizations SET status = $2, sources = $3, ai_confidence = $4, enriched_at = now(), logo_checked_at = now(),
             enrich_error = $5, enrich_attempts = enrich_attempts + 1, updated_at = now()
          WHERE id = $1`,
         [org.id, status, JSON.stringify(sources), confidence,
@@ -203,4 +220,34 @@ export async function enrichBatch({ limit, ids, log = console.log, onPending }) 
     stats.llm_model = llmState.model;
     stats.llm_quota_exhausted = llmState.quotaExhausted;
     return stats;
+}
+
+/**
+ * Re-checks logos of already moderated organizations (e.g. after the logo rules changed):
+ * visits the known website and Telegram channel only, without a new web search.
+ */
+export async function refreshLogos({ limit = 50, log = console.log } = {}) {
+    const { rows } = await query(
+        `SELECT * FROM organizations
+         WHERE status IN ('pending', 'approved', 'hidden') AND logo_checked_at IS NULL
+         ORDER BY is_featured DESC, status = 'approved' DESC, id LIMIT $1`,
+        [limit],
+    );
+    let found = 0;
+    for (const org of rows) {
+        const tokens = nameTokens(org.name);
+        const pages = [];
+        const website = org.contacts?.website;
+        if (website) {
+            const fetched = await fetchHtml(/^https?:/i.test(website) ? website : `https://${website}`);
+            const home = fetched && extractPage(fetched);
+            if (home && verifySite(org, home, tokens) >= 0.6) pages.push(home);
+        }
+        const telegram = org.contacts?.telegram ? await readTelegramChannel(org.contacts.telegram) : null;
+        const logo = org.logo_url || (await findLogo(org, { pages, telegram, tokens }));
+        await query('UPDATE organizations SET logo_url = $2, logo_checked_at = now() WHERE id = $1', [org.id, logo]);
+        if (logo) found++;
+        log(`  logo #${org.id}: ${logo || '—'}`);
+    }
+    return { checked: rows.length, found };
 }

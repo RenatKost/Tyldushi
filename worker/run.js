@@ -4,9 +4,10 @@
 //   node worker/run.js import [--limit 200]
 //   node worker/run.js enrich [--limit 5] [--id 12,13]
 //   node worker/run.js notify
+//   node worker/run.js logos [--limit 50]
 import { migrate, pool, query } from '../server/db.js';
 import { sendModerationCard, telegramEnabled } from '../server/telegram.js';
-import { enrichBatch } from './enrich/index.js';
+import { enrichBatch, refreshLogos } from './enrich/index.js';
 import { searchConfigured } from './enrich/search.js';
 import { importRegistry } from './registry.js';
 
@@ -68,6 +69,11 @@ async function runEnrich() {
     return track('enrich', () => enrichBatch({ limit, ids, onPending }));
 }
 
+async function runLogos() {
+    const limit = arg('limit') ? Number(arg('limit')) : 50;
+    return track('logos', () => refreshLogos({ limit }));
+}
+
 async function runNotify() {
     if (!telegramEnabled) {
         console.log('[notify] skipped: TELEGRAM_BOT_TOKEN is not set');
@@ -103,6 +109,7 @@ async function main() {
         // A failed registry download must not block enrichment of what is already imported.
         await runImport().catch(err => console.error('[import] failed', err.message));
     }
+    if (command === 'logos' || command === 'all') await runLogos().catch(err => console.error('[logos] failed', err.message));
     if (command === 'enrich' || command === 'all') await runEnrich();
     if (command === 'notify' || command === 'all') await runNotify();
 }

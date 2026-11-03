@@ -46,18 +46,44 @@
         return many;
     }
 
-    function initials(name) {
-        const words = String(name).replace(/["«»“”]/g, '').split(/\s+/)
-            .filter(w => w.length > 2 && !/^(благодійн|громадськ|організ|фонд|міжнародн)/i.test(w));
-        return (words[0] || name || '?').charAt(0).toUpperCase();
+    // Each help direction has its own accent so cards are easy to tell apart at a glance.
+    const ACCENTS = {
+        military: '#5b6b2f', idp: '#2f6fb3', humanitarian: '#d9822b', medical: '#c0392b', children: '#e05a8a',
+        veterans: '#2e7d5b', psychological: '#7b4bb7', rehabilitation: '#159a9c', elderly: '#8d6e63', disability: '#1f8fd1',
+        animals: '#c9952b', education: '#3f51b5', legal: '#546e7a', housing: '#b0603a', community: '#8e44ad', ecology: '#3c9a3c',
+    };
+    const DEFAULT_ACCENT = '#4a3c7c';
+
+    const LEGAL_PREFIX = /^(міжнародн\S*\s+|всеукраїнськ\S*\s+)?(благодійн\S*\s+(організаці\S*|фонд\S*)|громадськ\S*\s+(організаці\S*|спілк\S*|об.єднанн\S*)|бо|бф|го|мбф)\s+/i;
+
+    /** "Благодійна організація «Благодійний фонд «Скаути Миколаєва»»" → "Скаути Миколаєва" */
+    function displayName(org) {
+        if (org.short_name) return org.short_name.replace(/^[«"]+|[»"]+$/g, '').trim();
+        const name = String(org.name || '');
+        const quoted = [...name.matchAll(/«([^«»]+)»/g)].map(m => m[1].trim()).filter(Boolean);
+        let core = quoted.length ? quoted[quoted.length - 1] : name.replace(/[«»"]/g, '');
+        for (let i = 0; i < 3 && LEGAL_PREFIX.test(core); i++) core = core.replace(LEGAL_PREFIX, '');
+        core = core.trim() || name;
+        return core.charAt(0).toUpperCase() + core.slice(1);
     }
 
-    function logoHtml(org) {
-        const src = org.logo_url && (org.logo_url.startsWith('/media/') ? org.logo_url : safeUrl(org.logo_url));
-        return src
-            ? `<span class="org-logo" data-i="${esc(initials(org.name))}"><img src="${esc(src)}" alt="" loading="lazy" onerror="this.parentNode.textContent=this.parentNode.dataset.i"></span>`
-            : `<span class="org-logo" aria-hidden="true">${esc(initials(org.name))}</span>`;
+    /** Drops a leading "Фонд «X» — це" that repeats the title, so the excerpt starts with substance. */
+    function cleanExcerpt(text, title) {
+        let t = String(text || '').trim();
+        const m = t.match(/^([^.!?]{0,180}?)\s[—–-]\s(це\s+)?/);
+        if (m && m[1].toLowerCase().includes(title.toLowerCase().slice(0, 12))) t = t.slice(m[0].length);
+        return t.charAt(0).toUpperCase() + t.slice(1);
     }
+
+    function logoHtml(org, cls = 'org-logo') {
+        const src = org.logo_url && (org.logo_url.startsWith('/media/') ? org.logo_url : safeUrl(org.logo_url));
+        return src ? `<span class="${cls}"><img src="${esc(src)}" alt="" loading="lazy" onerror="this.parentNode.remove()"></span>` : '';
+    }
+
+    const CONTACT_ICONS = [
+        ['website', 'fas fa-globe', 'Сайт'], ['telegram', 'fab fa-telegram', 'Telegram'], ['facebook', 'fab fa-facebook-f', 'Facebook'],
+        ['instagram', 'fab fa-instagram', 'Instagram'], ['youtube', 'fab fa-youtube', 'YouTube'], ['phone', 'fas fa-phone', 'Телефон'],
+    ];
 
     const typeLabel = t => (t === 'charity_fund' ? 'Благодійний фонд' : 'Громадська організація');
     const category = key => categories.find(c => c.key === key);
@@ -90,25 +116,38 @@
 
     /* ---------- list ---------- */
     function cardHtml(org) {
-        const tags = (org.help_categories || []).slice(0, 3).map(k => category(k)).filter(Boolean)
-            .map(c => `<span class="org-tag">${esc(c.label)}</span>`).join('');
+        const cats = (org.help_categories || []).map(k => category(k)).filter(Boolean);
+        const primary = cats[0];
+        const accent = ACCENTS[primary?.key] || DEFAULT_ACCENT;
+        const title = displayName(org);
+        const excerpt = cleanExcerpt(org.excerpt, title);
+        const tags = cats.slice(0, 3).map((c, i) =>
+            `<span class="org-tag${i === 0 ? ' is-primary' : ''}" style="--tag:${ACCENTS[c.key] || DEFAULT_ACCENT}"><i class="fas ${esc(c.icon)}"></i>${esc(c.label)}</span>`).join('');
+        const more = cats.length > 3 ? `<span class="org-tag is-more">+${cats.length - 3}</span>` : '';
+        const links = CONTACT_ICONS.filter(([k]) => org.contacts && org.contacts[k])
+            .map(([, icon, label]) => `<span class="org-card__link" title="${label}"><i class="${icon}"></i></span>`).join('');
+        const cases = org.cases_count ? `<span class="org-card__cases"><i class="fas fa-award"></i>${org.cases_count} ${plural(org.cases_count, 'кейс', 'кейси', 'кейсів')}</span>` : '';
+
         return `
-            <a class="org-card${org.is_featured ? ' is-featured' : ''}" href="/organizations/${encodeURIComponent(org.slug)}"
-               data-slug="${esc(org.slug)}" data-flip-id="org-${org.id}">
-                ${org.is_featured ? '<span class="org-card__badge"><i class="fas fa-star"></i> Топ</span>' : ''}
+            <a class="org-card${org.is_featured ? ' is-featured' : ''}${org.logo_url ? ' has-logo' : ''}" href="/organizations/${encodeURIComponent(org.slug)}"
+               data-slug="${esc(org.slug)}" data-flip-id="org-${org.id}" style="--accent:${accent}">
                 <div class="org-card__head">
-                    ${logoHtml(org)}
-                    <div>
-                        <h3 class="org-card__title">${esc(org.short_name || org.name)}</h3>
-                        <div class="org-card__meta">
-                            ${org.city ? `<span><i class="fas fa-location-dot"></i>${esc(org.city)}</span>` : ''}
-                            <span><i class="fas fa-building-ngo"></i>${typeLabel(org.org_type)}</span>
-                        </div>
+                    <div class="org-card__heading">
+                        <span class="org-card__type">
+                            ${org.is_featured ? '<i class="fas fa-star"></i>Рекомендуємо · ' : ''}${typeLabel(org.org_type)}
+                        </span>
+                        <h3 class="org-card__title">${esc(title)}</h3>
+                        ${org.city ? `<span class="org-card__city"><i class="fas fa-location-dot"></i>${esc(org.city)}</span>` : ''}
                     </div>
+                    ${logoHtml(org, 'org-card__logo')}
                 </div>
-                ${org.excerpt ? `<p class="org-card__excerpt">${esc(org.excerpt)}</p>` : ''}
-                ${tags ? `<div class="org-tags">${tags}</div>` : ''}
-                <span class="org-card__more">Детальніше <i class="fas fa-arrow-right"></i></span>
+                ${excerpt ? `<p class="org-card__excerpt">${esc(excerpt)}</p>` : ''}
+                ${tags ? `<div class="org-tags">${tags}${more}</div>` : ''}
+                <div class="org-card__foot">
+                    <div class="org-card__links">${links}</div>
+                    ${cases}
+                    <span class="org-card__go" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
+                </div>
             </a>`;
     }
 
@@ -255,14 +294,12 @@
                     <div class="org-detail__main">
                         <div class="org-panel" data-anim>
                             <div class="org-detail__head">
-                                ${logoHtml(org)}
+                                ${logoHtml(org, 'org-detail__logo')}
                                 <div>
-                                    <h1>${esc(org.name)}</h1>
-                                    <div class="org-card__meta">
-                                        ${org.city ? `<span><i class="fas fa-location-dot"></i>${esc(org.city)}</span>` : ''}
-                                        <span><i class="fas fa-building-ngo"></i>${typeLabel(org.org_type)}</span>
-                                        ${org.is_featured ? '<span><i class="fas fa-star"></i>Рекомендуємо</span>' : ''}
-                                    </div>
+                                    <span class="org-card__type">${org.is_featured ? '<i class="fas fa-star"></i>Рекомендуємо · ' : ''}${typeLabel(org.org_type)}</span>
+                                    <h1>${esc(displayName(org))}</h1>
+                                    <p class="org-detail__legal">${esc(org.name)}</p>
+                                    ${org.city ? `<span class="org-card__city"><i class="fas fa-location-dot"></i>${esc(org.city)}</span>` : ''}
                                 </div>
                             </div>
                             <h2><i class="fas fa-circle-info"></i>Про організацію</h2>
@@ -303,7 +340,9 @@
             const org = await getJSON(`${API}/organizations/${encodeURIComponent(slug)}`);
             if (!categories.length) categories = await getJSON(`${API}/categories`).catch(() => []);
             els.detail.innerHTML = detailHtml(org);
-            document.title = `${org.name}${org.city ? ` — ${org.city}` : ''} | Тил Душі`;
+            const primary = (org.help_categories || [])[0];
+            els.detail.style.setProperty('--accent', ACCENTS[primary] || DEFAULT_ACCENT);
+            document.title = `${displayName(org)}${org.city ? ` — ${org.city}` : ''} | Тил Душі`;
             if (hasGsap) {
                 gsap.from(els.detail.querySelectorAll('[data-anim]'), { y: 40, autoAlpha: 0, duration: 0.8, stagger: 0.1, ease: 'power3.out' });
                 gsap.from(els.detail.querySelectorAll('.org-help-item, .org-case, .org-contact'), { y: 16, autoAlpha: 0, duration: 0.5, stagger: 0.04, delay: 0.3 });

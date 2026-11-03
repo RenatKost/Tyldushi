@@ -22,7 +22,7 @@ const SCHEMA = {
         match_ok: { type: Type.BOOLEAN, description: 'true if the materials are really about this exact organization' },
         is_active: { type: Type.BOOLEAN, description: 'true if there are signs of activity in the last 2 years' },
         confidence: { type: Type.NUMBER, description: '0..1 how confident you are in the whole profile' },
-        short_name: { type: Type.STRING, description: 'Short public name in Ukrainian, e.g. «Повернись живим»' },
+        short_name: { type: Type.STRING, description: 'Public name as people know it, without legal form and quotes, e.g. Повернись живим' },
         city: { type: Type.STRING, description: 'City where the organization works, in Ukrainian nominative case, or empty' },
         description: { type: Type.STRING, description: '2-4 paragraphs in Ukrainian: who they are, what they do, for whom' },
         help_categories: { type: Type.ARRAY, items: { type: Type.STRING, enum: CATEGORY_KEYS } },

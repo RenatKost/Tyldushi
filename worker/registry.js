@@ -78,7 +78,6 @@ function parseRecord(record) {
         edrpou,
         raw_name: fullName,
         name: prettifyName(fullName),
-        short_name: tag(record, 'SHORT_NAME') ? prettifyName(tag(record, 'SHORT_NAME')) : null,
         org_type: orgType,
         registry_state: tag(record, 'STAN'),
         registered_at: parseDate(tag(record, 'REGISTRATION')),
@@ -129,11 +128,11 @@ async function upsertBatch(rawBatch) {
     // The same code can appear twice in one dump; a single INSERT may touch a row only once.
     const batch = [...new Map(rawBatch.map(o => [o.edrpou, o])).values()];
     if (!batch.length) return 0;
-    const cols = ['slug', 'edrpou', 'name', 'short_name', 'org_type', 'city', 'region', 'head_name',
+    const cols = ['slug', 'edrpou', 'name', 'org_type', 'city', 'region', 'head_name',
         'registered_at', 'registry_state', 'registry_purpose', 'priority'];
     const values = [];
     const rows = batch.map((o, i) => {
-        values.push(`${slugify(o.name).slice(0, 60)}-${o.edrpou}`, o.edrpou, o.name, o.short_name, o.org_type,
+        values.push(`${slugify(o.name).slice(0, 60)}-${o.edrpou}`, o.edrpou, o.name, o.org_type,
             o.city, o.region, o.head_name, o.registered_at, o.registry_state, o.registry_purpose, o.priority);
         return `(${cols.map((_, j) => `$${i * cols.length + j + 1}`).join(', ')})`;
     });
@@ -149,7 +148,6 @@ async function upsertBatch(rawBatch) {
             -- Names broken by an older quote parser (" »word" or a trailing "«") are repaired in any status.
             name = CASE WHEN organizations.status = 'registry' OR organizations.name ~ '(\s»|«\s*$)'
                         THEN EXCLUDED.name ELSE organizations.name END,
-            short_name = CASE WHEN organizations.status = 'registry' THEN EXCLUDED.short_name ELSE organizations.short_name END,
             city = coalesce(organizations.city, EXCLUDED.city),
             region = coalesce(organizations.region, EXCLUDED.region)`,
         values,

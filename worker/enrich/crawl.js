@@ -104,6 +104,52 @@ function normalizePhone(p) {
 
 const SUBPAGE_RE = /(про[\s-]?нас|about|контакт|contact|звіт|report|новин|news|проєкт|проект|project|діяльн|допомог|кейс|історі|наші[\s-]справи|результат|blog|блог)/i;
 
+const LOGO_HINT = /(^|[^a-z])(logo|лого|brand|emblem|site-icon|custom-logo)/i;
+
+/**
+ * Logo candidates in order of reliability. og:image is ignored unless its URL says "logo":
+ * it is usually a cover photo or an article picture, not the organization's logo.
+ */
+function findLogoCandidates($, abs) {
+    const found = [];
+    const add = url => {
+        const u = url && abs(String(url).trim());
+        if (u && /^https?:/.test(u) && !found.includes(u)) found.push(u);
+    };
+
+    // 1. Structured data: schema.org Organization.logo
+    $('script[type="application/ld+json"]').each((_, el) => {
+        try {
+            const visit = node => {
+                if (!node || typeof node !== 'object') return;
+                if (Array.isArray(node)) return node.forEach(visit);
+                if (node.logo) add(typeof node.logo === 'string' ? node.logo : node.logo.url || node.logo.contentUrl);
+                if (node['@graph']) visit(node['@graph']);
+            };
+            visit(JSON.parse($(el).contents().text()));
+        } catch { /* invalid JSON-LD */ }
+    });
+
+    // 2. Images marked as a logo, preferring the page header.
+    const imgs = $('header img, .header img, nav img, img').filter((_, el) => {
+        const $el = $(el);
+        const attrs = `${$el.attr('class')} ${$el.attr('id')} ${$el.attr('alt')} ${$el.attr('src')} ${$el.parent().attr('class')} ${$el.parent().attr('id')}`;
+        return LOGO_HINT.test(attrs);
+    });
+    imgs.each((_, el) => add($(el).attr('src') || $(el).attr('data-src')));
+
+    // 3. Touch icons and large favicons are square logo marks.
+    $('link[rel~="apple-touch-icon"], link[rel~="apple-touch-icon-precomposed"]').each((_, el) => add($(el).attr('href')));
+    $('link[rel~="icon"]').each((_, el) => {
+        const sizes = parseInt(($(el).attr('sizes') || '').split('x')[0], 10);
+        if (sizes >= 96 || /\.svg($|\?)/i.test($(el).attr('href') || '')) add($(el).attr('href'));
+    });
+
+    const og = $('meta[property="og:image"]').attr('content');
+    if (og && /logo/i.test(og)) add(og);
+    return found.slice(0, 6);
+}
+
 /** Extracts structured facts from an HTML page. */
 export function extractPage({ url, html }) {
     const $ = cheerio.load(html);
@@ -119,8 +165,7 @@ export function extractPage({ url, html }) {
     const title = $('title').first().text().trim();
     const description = $('meta[name="description"]').attr('content')?.trim()
         || $('meta[property="og:description"]').attr('content')?.trim() || '';
-    const ogImage = $('meta[property="og:image"]').attr('content');
-    const logoImg = $('img').filter((_, el) => /logo|лого/i.test(`${$(el).attr('src')} ${$(el).attr('class')} ${$(el).attr('alt')} ${$(el).attr('id')}`)).first().attr('src');
+    const logos = findLogoCandidates($, abs);
 
     const links = [];
     const socials = {};
@@ -170,7 +215,7 @@ export function extractPage({ url, html }) {
         url,
         title,
         description,
-        logo: ogImage || logoImg ? abs(ogImage || logoImg) : null,
+        logos,
         text,
         links,
         subpages,
@@ -199,6 +244,8 @@ export async function readTelegramChannel(channelUrl) {
     return {
         url: `https://t.me/${m[1]}`,
         title: $('.tgme_channel_info_header_title').text().trim(),
+        photo: $('.tgme_channel_info_header .tgme_page_photo_image img').attr('src')
+            || $('.tgme_page_photo_image img').first().attr('src') || null,
         description: $('.tgme_channel_info_description').text().trim(),
         posts,
     };

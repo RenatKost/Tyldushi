@@ -2,6 +2,7 @@ import { Api, Bot, InlineKeyboard, webhookCallback } from 'grammy';
 import { createMagicLink } from './auth.js';
 import { query } from './db.js';
 import { CATEGORIES } from './lib/categories.js';
+import { displayName } from './lib/display.js';
 import { CONTACT_KEYS, getById, setFeatured, setStatus, updateOrg } from './lib/orgs.js';
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -45,7 +46,8 @@ export function renderCard(org) {
     const sources = (org.sources || []).slice(0, 5).map(s => `• ${esc(typeof s === 'string' ? s : s.url)}`);
 
     const lines = [
-        `<b>${esc(org.name)}</b>`,
+        `<b>${esc(displayName(org))}</b>`,
+        `<i>${esc(org.name)}</i>`,
         `${org.org_type === 'charity_fund' ? 'Благодійний фонд' : 'Громадська організація'} · ${esc(org.city || 'місто невідоме')}${org.edrpou ? ` · ЄДРПОУ ${esc(org.edrpou)}` : ''}`,
         `Статус: ${STATUS_LABELS[org.status] || org.status}${org.is_featured ? ' · ⭐ ТОП' : ''}`,
         '',
@@ -56,6 +58,7 @@ export function renderCard(org) {
     if (contacts.length) lines.push('', '<b>Контакти:</b>', ...contacts);
     if (sources.length) lines.push('', '<b>Джерела:</b>', ...sources);
     if (org.ai_confidence != null) lines.push('', `Впевненість бота: ${Math.round(org.ai_confidence * 100)}%`);
+    lines.push(org.logo_url ? `Логотип: ${esc(publicUrl + org.logo_url)}` : 'Логотип: не знайдено');
 
     let text = lines.join('\n');
     if (text.length > 4000) text = `${text.slice(0, 3990)}…`;

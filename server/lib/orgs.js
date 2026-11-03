@@ -8,8 +8,9 @@ export const CONTACT_KEYS = ['phone', 'email', 'website', 'facebook', 'instagram
 const PUBLIC_ORDER = 'is_featured DESC, featured_rank ASC NULLS LAST, name ASC';
 
 const LIST_COLUMNS = `id, slug, edrpou, name, short_name, org_type, city, region, help_categories,
-    logo_url, is_featured, featured_rank, status, updated_at,
-    left(coalesce(description, ''), 220) AS excerpt`;
+    logo_url, is_featured, featured_rank, status, updated_at, contacts,
+    (SELECT count(*)::int FROM organization_cases c WHERE c.organization_id = organizations.id) AS cases_count,
+    left(coalesce(description, ''), 320) AS excerpt`;
 
 function str(value, max = 5000) {
     if (value === undefined || value === null) return null;
@@ -161,7 +162,7 @@ export async function adminList({ status, q, city, type, featured, page = 1, lim
     const order = featured ? 'featured_rank ASC NULLS LAST, name' : 'updated_at DESC';
 
     const [{ rows }, { rows: c }] = await Promise.all([
-        query(`SELECT ${LIST_COLUMNS}, contacts, enriched_at FROM organizations ${whereSql}
+        query(`SELECT ${LIST_COLUMNS}, enriched_at FROM organizations ${whereSql}
                ORDER BY ${order} LIMIT ${pageSize} OFFSET ${offset}`, params),
         query(`SELECT count(*)::int AS total FROM organizations ${whereSql}`, params),
     ]);

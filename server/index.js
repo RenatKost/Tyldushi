@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { magicHandler } from './auth.js';
 import { hasDatabase, migrate } from './db.js';
+import { displayName } from './lib/display.js';
 import { getPublicBySlug, listApprovedSlugs } from './lib/orgs.js';
 import adminRoutes from './routes/admin.js';
 import publicRoutes from './routes/public.js';
@@ -71,7 +72,7 @@ app.get('/organizations/:slug', async (req, res, next) => {
         const org = hasDatabase ? await getPublicBySlug(req.params.slug) : null;
         if (!org) return res.redirect(302, '/organizations');
         await renderOrganizationsPage(res, {
-            title: `${org.name}${org.city ? ` — ${org.city}` : ''} | Тил Душі`,
+            title: `${displayName(org)}${org.city ? ` — ${org.city}` : ''} | Тил Душі`,
             description: (org.description || LIST_META.description).slice(0, 200),
             canonical: `${PUBLIC_URL}/organizations/${org.slug}`,
         });
