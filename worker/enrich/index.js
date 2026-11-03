@@ -161,10 +161,10 @@ export async function enrichOne(org, log = console.log) {
 }
 
 /** Picks the next organizations from the queue and enriches them one by one. */
-export async function enrichBatch({ limit, ids, log = console.log }) {
-    // Rows stuck in "enriching" after a crash go back to the queue.
-    await query(`UPDATE organizations SET status = 'registry'
-                 WHERE status = 'enriching' AND updated_at < now() - interval '6 hours'`);
+export async function enrichBatch({ limit, ids, log = console.log, onPending }) {
+    // Only one worker runs at a time (advisory lock), so rows left in "enriching" are from an
+    // interrupted run and go back to the queue.
+    await query(`UPDATE organizations SET status = 'registry' WHERE status = 'enriching'`);
 
     const { rows } = ids?.length
         ? await query(`UPDATE organizations SET status = 'enriching', updated_at = now()
@@ -186,6 +186,9 @@ export async function enrichBatch({ limit, ids, log = console.log }) {
             const status = await enrichOne(org, log);
             stats.processed++;
             stats[status] = (stats[status] || 0) + 1;
+            if (status === 'pending' && onPending) {
+                await onPending(org.id).catch(err => log(`  ! telegram: ${err.message}`));
+            }
         } catch (err) {
             stats.errors++;
             log(`  ! error: ${err.message}`);

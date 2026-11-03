@@ -63,7 +63,9 @@ async function runEnrich() {
         console.log(`[enrich] daily limit (${DAILY_LIMIT}) reached`);
         return;
     }
-    return track('enrich', () => enrichBatch({ limit, ids }));
+    // Each card goes to the moderators as soon as it is ready, not after the whole batch.
+    const onPending = telegramEnabled ? id => sendModerationCard(id) : undefined;
+    return track('enrich', () => enrichBatch({ limit, ids, onPending }));
 }
 
 async function runNotify() {

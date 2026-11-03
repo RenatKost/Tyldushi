@@ -88,6 +88,8 @@ export async function structureWithLlm(org, materials) {
             });
             llmState.calls++;
             llmState.model = model;
+            // Stick to a model that works for the rest of the run instead of retrying an overloaded one.
+            modelIndex = index;
             const data = JSON.parse(res.text);
             data.help_categories = normalizeCategories(data.help_categories);
             return data;
@@ -107,9 +109,9 @@ export async function structureWithLlm(org, materials) {
                 return null;
             }
             if (status === 503 || status === 500 || /UNAVAILABLE|overloaded|high demand|INTERNAL/i.test(message)) {
-                if (retries < 2) {
+                if (retries < 1) {
                     retries++;
-                    await sleep(10000 * retries);
+                    await sleep(8000);
                     continue;
                 }
                 console.warn(`[llm] ${model} overloaded, trying next model`);
