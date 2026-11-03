@@ -48,10 +48,26 @@ app.get('/fond/magic', noIndex, magicHandler);
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
-let orgTemplate;
+// Cloudflare caches static files for hours, so local CSS/JS links carry the deploy version.
+const ASSET_VERSION = (process.env.RAILWAY_GIT_COMMIT_SHA || String(Date.now())).slice(0, 10);
+const htmlCache = new Map();
+
+async function loadHtml(file) {
+    if (!htmlCache.has(file)) {
+        const raw = await fs.readFile(path.join(PUBLIC_DIR, file), 'utf8');
+        htmlCache.set(file, raw.replace(/(href|src)="(\/(?:css|js|fond)\/[^"?]+\.(?:css|js))"/g, `$1="$2?v=${ASSET_VERSION}"`));
+    }
+    return htmlCache.get(file);
+}
+
+function sendHtml(file, cacheControl) {
+    return (req, res, next) => loadHtml(file)
+        .then(html => res.set('Cache-Control', cacheControl).type('html').send(html))
+        .catch(next);
+}
+
 async function renderOrganizationsPage(res, meta) {
-    orgTemplate ??= await fs.readFile(path.join(PUBLIC_DIR, 'organizations.html'), 'utf8');
-    const html = orgTemplate
+    const html = (await loadHtml('organizations.html'))
         .replaceAll('{{TITLE}}', esc(meta.title))
         .replaceAll('{{DESCRIPTION}}', esc(meta.description))
         .replaceAll('{{CANONICAL}}', esc(meta.canonical));
@@ -82,11 +98,10 @@ app.get('/organizations/:slug', async (req, res, next) => {
 });
 
 // The admin panel lives at a non-obvious path and is never indexed or advertised in robots.txt.
-app.get(['/fond', '/fond/'], noIndex, (req, res) => {
-    res.set('Cache-Control', 'no-store');
-    res.sendFile(path.join(PUBLIC_DIR, 'fond', 'index.html'));
-});
+app.get(['/fond', '/fond/'], noIndex, sendHtml('fond/index.html', 'no-store'));
 app.use('/fond', noIndex);
+
+app.get(['/', '/index.html'], sendHtml('index.html', 'no-cache'));
 
 app.get('/robots.txt', (req, res) => {
     res.type('text/plain').send(`User-agent: *\nDisallow: /admin\nDisallow: /api/\nSitemap: ${PUBLIC_URL}/sitemap.xml\n`);
