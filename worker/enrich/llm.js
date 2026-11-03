@@ -74,8 +74,11 @@ export async function structureWithLlm(org, materials) {
     const wait = lastCall + MIN_INTERVAL_MS - Date.now();
     if (wait > 0) await sleep(wait);
 
-    while (modelIndex < MODELS.length) {
-        const model = MODELS[modelIndex];
+    // Overloaded (503) models are retried, then the next model is tried for this call only.
+    let index = modelIndex;
+    let retries = 0;
+    while (index < MODELS.length) {
+        const model = MODELS[index];
         lastCall = Date.now();
         try {
             const res = await ai.models.generateContent({
@@ -93,13 +96,26 @@ export async function structureWithLlm(org, materials) {
             const message = String(err.message || err);
             if (status === 404 || /not found|is not supported/i.test(message)) {
                 console.warn(`[llm] model ${model} unavailable, trying next`);
-                modelIndex++;
+                if (index === modelIndex) modelIndex++;
+                index++;
+                retries = 0;
                 continue;
             }
             if (status === 429 || /quota|RESOURCE_EXHAUSTED/i.test(message)) {
                 console.warn('[llm] free quota exhausted, switching to rule-based mode for this run');
                 llmState.quotaExhausted = true;
                 return null;
+            }
+            if (status === 503 || status === 500 || /UNAVAILABLE|overloaded|high demand|INTERNAL/i.test(message)) {
+                if (retries < 2) {
+                    retries++;
+                    await sleep(10000 * retries);
+                    continue;
+                }
+                console.warn(`[llm] ${model} overloaded, trying next model`);
+                index++;
+                retries = 0;
+                continue;
             }
             console.warn(`[llm] ${message.slice(0, 300)}`);
             return null;
