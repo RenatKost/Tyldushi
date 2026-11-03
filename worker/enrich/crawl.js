@@ -30,6 +30,21 @@ export function socialKind(url) {
     return Object.entries(SOCIAL_HOSTS).find(([, re]) => re.test(host))?.[0] || null;
 }
 
+const NOT_A_PROFILE = /sharer|share\.php|intent|dialog|plugins|\/watch|\/\+|joinchat|\/videos?\/|\/posts?\/|\/p\/|\/reels?\/|\/photos?\/|\/permalink|\/story|\/events?\/|\/hashtag|\/shorts\/|\/status\/|[?&](v|fbid|story_fbid)=/i;
+
+/** True for a link to a profile/page/channel, false for a single post, video or share link. */
+export function isProfileUrl(url) {
+    try {
+        const u = new URL(url);
+        const kind = socialKind(url);
+        if (!kind || u.pathname.length <= 1 || NOT_A_PROFILE.test(url)) return false;
+        if (kind === 'telegram' && (/bot\/?$/i.test(u.pathname) || /^\/s?\/?[^/]+\/\d+/.test(u.pathname))) return false;
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 async function allowedByRobots(url) {
     const u = new URL(url);
     if (!robotsCache.has(u.origin)) {
@@ -185,10 +200,7 @@ export function extractPage({ url, html }) {
         if (!link || !/^https?:/.test(link)) return;
         const kind = socialKind(link);
         if (kind) {
-            const path = new URL(link).pathname;
-            const isProfile = path.length > 1 && !/sharer|share\.php|intent|dialog|plugins|\/watch|\/\+|joinchat/i.test(link)
-                && !(kind === 'telegram' && /bot\/?$/i.test(path));
-            if (isProfile && !socials[kind]) socials[kind] = link.replace(/\?.*$/, '');
+            if (isProfileUrl(link) && !socials[kind]) socials[kind] = link.replace(/\?.*$/, '');
             return;
         }
         links.push({ url: link, text: $(el).text().replace(/\s+/g, ' ').trim().slice(0, 120), internal: hostOf(link) === hostOf(url) });

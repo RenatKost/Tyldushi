@@ -1,7 +1,7 @@
 // Chooses the official website and social profiles of an organization among search results.
 import { slugify } from '../../server/lib/slug.js';
 import { coreName } from '../names.js';
-import { hostOf, socialKind } from './crawl.js';
+import { hostOf, isProfileUrl, socialKind } from './crawl.js';
 
 // Registries, aggregators and catalogs: useful as confirmation, never the organization's own site.
 const AGGREGATORS = /(opendatabot|youcontrol|clarity-project|ring\.org|edr\.|vkursi|kompass|rusprofile|zakon\.rada|prozorro|dozorro|010\.ua|008\.ua|ua-region|ua\.all-biz|catalog|spravochnik|businessguide|minjust|data\.gov|wikipedia|wikidata|google\.|goo\.gl|maps\.|linkedin|twitter\.com|x\.com|pinterest|olx|prom\.ua|rozetka|zhitlo|biz\.ligazakon|nais\.gov|tax\.gov|e-data|smida|charity\.in\.ua|gromada|decentralization|irs\.gov|dovidnyk|infopro|ua\.kompanii|kompanii|firms\.|company\.|companies\.|clarity|youscore|checkfirm|sumy-index|yellowpages|golden-pages|zoon|2gis|vsetovary|uaprom|tender|zvitnist|liqpay|monobank|privat24|privatbank|fondy|wayforpay|portmone|platon|dobro\.ua|gofundme|patreon|buymeacoffee|linktr\.ee|taplink|history\.org\.ua|reyestr|ukrstat|spending|nashigroshi|opencorporates|bizzy|ua\.biz|gov\.ua|court)/i;
@@ -55,7 +55,7 @@ export function rankResults(org, results) {
         const kind = socialKind(r.url);
         if (kind) {
             // The profile title itself must carry the name, not just a post that mentions it.
-            if (tokenScore(r.title || '', tokens) >= 0.6 && !socials[kind]) socials[kind] = r.url.replace(/\?.*$/, '');
+            if (isProfileUrl(r.url) && tokenScore(r.title || '', tokens) >= 0.6 && !socials[kind]) socials[kind] = r.url.replace(/\?.*$/, '');
             continue;
         }
         if (MEDIA.test(host)) continue;
