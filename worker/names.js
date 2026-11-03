@@ -37,6 +37,8 @@ export function prettifyName(name) {
     if (!name) return name;
     let s = placeQuotes(name);
     // Only fully upper-case words are lower-cased; mixed-case words were typed that way on purpose.
+    // One-letter prepositions and conjunctions: "ЗАХИСНИКИ З ДНІПРА" → "захисники з Дніпра".
+    s = s.replace(/(?<=\s)[ЗВУІЙА](?=\s)/g, w => w.toLowerCase());
     s = s.replace(/[А-ЯІЇЄҐA-Z][А-ЯІЇЄҐA-Z’'-]+/g, word => {
         if (ABBREVIATIONS.has(word)) return word;
         const lower = word.toLowerCase();

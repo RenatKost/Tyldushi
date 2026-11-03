@@ -146,7 +146,9 @@ async function upsertBatch(rawBatch) {
             registry_purpose = EXCLUDED.registry_purpose,
             head_name = EXCLUDED.head_name,
             priority = EXCLUDED.priority,
-            name = CASE WHEN organizations.status = 'registry' THEN EXCLUDED.name ELSE organizations.name END,
+            -- Names broken by an older quote parser (" »word" or a trailing "«") are repaired in any status.
+            name = CASE WHEN organizations.status = 'registry' OR organizations.name ~ '(\s»|«\s*$)'
+                        THEN EXCLUDED.name ELSE organizations.name END,
             short_name = CASE WHEN organizations.status = 'registry' THEN EXCLUDED.short_name ELSE organizations.short_name END,
             city = coalesce(organizations.city, EXCLUDED.city),
             region = coalesce(organizations.region, EXCLUDED.region)`,
