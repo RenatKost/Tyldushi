@@ -76,7 +76,7 @@ function editKeyboard(org) {
     const kb = new InlineKeyboard();
     for (const [field, label] of Object.entries(EDIT_FIELDS)) kb.text(label, `ef:${org.id}:${field}`).row();
     kb.text('🏷 Категорії', `ec:${org.id}`).row();
-    kb.url('🛠 Відкрити в адмінці', createMagicLink(publicUrl, `/admin#/org/${org.id}`)).row();
+    kb.url('🛠 Відкрити в адмінці', createMagicLink(publicUrl, `/fond#/org/${org.id}`)).row();
     kb.text('← Назад', `b:${org.id}`);
     return kb;
 }
@@ -132,12 +132,15 @@ function parseContacts(text) {
     return out;
 }
 
+const who = ctx => esc([ctx.from?.first_name, ctx.from?.last_name].filter(Boolean).join(' ') || ctx.from?.username || 'адмін');
+
+// Edit state is stored per admin (Telegram user id), so two admins in one group do not collide.
 function createBot() {
     const bot = new Bot(token);
 
     bot.command('start', async ctx => {
         if (!isAdmin(ctx)) {
-            return ctx.reply(`Ваш chat id: <code>${ctx.chat.id}</code>\nДодайте його в змінну TELEGRAM_ADMIN_CHAT_ID на Railway, щоб керувати організаціями.`, { parse_mode: 'HTML' });
+            return ctx.reply(`Chat id цього чату: <code>${ctx.chat.id}</code>\nДодайте його в змінну TELEGRAM_ADMIN_CHAT_ID на Railway, щоб керувати організаціями.`, { parse_mode: 'HTML' });
         }
         return ctx.reply('Бот модерації «Тил Душі».\n/queue — скільки організацій чекає рішення\n/next — показати наступну');
     });
@@ -168,10 +171,11 @@ function createBot() {
         await sendModerationCard(rows[0].id, ctx.api);
     });
 
-    async function refresh(ctx, orgId, kb) {
+    async function refresh(ctx, orgId, kb, note) {
         const org = await getById(orgId);
         if (!org) return ctx.answerCallbackQuery({ text: 'Організацію видалено' });
-        await ctx.editMessageText(renderCard(org), sendOpts(kb ? kb(org) : mainKeyboard(org))).catch(err => {
+        const text = note ? `${renderCard(org)}\n\n${note}` : renderCard(org);
+        await ctx.editMessageText(text.slice(0, 4096), sendOpts(kb ? kb(org) : mainKeyboard(org))).catch(err => {
             if (!String(err.description || err.message).includes('message is not modified')) throw err;
         });
         return org;
@@ -179,13 +183,13 @@ function createBot() {
 
     bot.callbackQuery(/^a:(\d+)$/, async ctx => {
         await setStatus([Number(ctx.match[1])], 'approved');
-        await refresh(ctx, Number(ctx.match[1]));
+        await refresh(ctx, Number(ctx.match[1]), null, `✅ Схвалив(ла): ${who(ctx)}`);
         await ctx.answerCallbackQuery({ text: 'Опубліковано ✅' });
     });
 
     bot.callbackQuery(/^r:(\d+)$/, async ctx => {
         await setStatus([Number(ctx.match[1])], 'rejected');
-        await refresh(ctx, Number(ctx.match[1]));
+        await refresh(ctx, Number(ctx.match[1]), null, `❌ Відхилив(ла): ${who(ctx)}`);
         await ctx.answerCallbackQuery({ text: 'Відхилено' });
     });
 
@@ -193,18 +197,18 @@ function createBot() {
         const id = Number(ctx.match[1]);
         const org = await getById(id);
         await setFeatured(id, !org.is_featured);
-        await refresh(ctx, id);
+        await refresh(ctx, id, null, org.is_featured ? `☆ Прибрав(ла) з топу: ${who(ctx)}` : `⭐ Додав(ла) в топ: ${who(ctx)}`);
         await ctx.answerCallbackQuery({ text: org.is_featured ? 'Прибрано з топу' : 'Додано в топ ⭐' });
     });
 
     bot.callbackQuery(/^e:(\d+)$/, async ctx => {
-        await setState(ctx.chat.id, null);
+        await setState(ctx.from.id, null);
         await refresh(ctx, Number(ctx.match[1]), editKeyboard);
         await ctx.answerCallbackQuery();
     });
 
     bot.callbackQuery(/^b:(\d+)$/, async ctx => {
-        await setState(ctx.chat.id, null);
+        await setState(ctx.from.id, null);
         await refresh(ctx, Number(ctx.match[1]));
         await ctx.answerCallbackQuery();
     });
@@ -227,35 +231,44 @@ function createBot() {
     bot.callbackQuery(/^ef:(\d+):(\w+)$/, async ctx => {
         const [id, field] = [Number(ctx.match[1]), ctx.match[2]];
         if (!EDIT_FIELDS[field]) return ctx.answerCallbackQuery();
-        await setState(ctx.chat.id, { orgId: id, field, messageId: ctx.callbackQuery.message?.message_id });
+        await setState(ctx.from.id, { orgId: id, field, chatId: ctx.chat.id, messageId: ctx.callbackQuery.message?.message_id });
         const hint = field === 'contacts'
-            ? `Надішліть контакти, кожен з нового рядка у форматі <code>ключ: значення</code>.\nКлючі: ${CONTACT_KEYS.join(', ')}`
-            : `Надішліть нове значення для поля «${EDIT_FIELDS[field]}».`;
-        await ctx.reply(`${hint}\n/cancel — скасувати`, { parse_mode: 'HTML' });
+            ? `надішліть контакти, кожен з нового рядка у форматі <code>ключ: значення</code>.\nКлючі: ${CONTACT_KEYS.join(', ')}`
+            : `надішліть нове значення для поля «${EDIT_FIELDS[field]}».`;
+        // In groups the bot only sees replies to its own messages, so the prompt forces a reply.
+        await ctx.reply(`${who(ctx)}, ${hint}\nВідповідайте на це повідомлення. /cancel — скасувати`, {
+            parse_mode: 'HTML',
+            reply_markup: { force_reply: true, selective: true, input_field_placeholder: EDIT_FIELDS[field] },
+        });
         await ctx.answerCallbackQuery();
     });
 
     bot.command('cancel', async ctx => {
-        await setState(ctx.chat.id, null);
+        await setState(ctx.from.id, null);
         await ctx.reply('Скасовано');
     });
 
     bot.on('message:text', async ctx => {
-        const state = await getState(ctx.chat.id);
-        if (!state) return ctx.reply('Використовуйте кнопки під картками або /next');
+        const state = await getState(ctx.from.id);
+        if (!state) {
+            if (ctx.chat.type === 'private') await ctx.reply('Використовуйте кнопки під картками або /next');
+            return;
+        }
         const value = ctx.message.text;
         const patch = state.field === 'contacts' ? { contacts: parseContacts(value) } : { [state.field]: value };
         if (state.field === 'contacts' && !Object.keys(patch.contacts).length) {
-            return ctx.reply('Не вдалося розпізнати жодного контакту. Приклад:\nphone: +380 67 000 00 00\nemail: info@example.org');
+            return ctx.reply('Не вдалося розпізнати жодного контакту. Приклад:\nphone: +380 67 000 00 00\nemail: info@example.org',
+                { reply_markup: { force_reply: true, selective: true } });
         }
         await updateOrg(state.orgId, patch);
-        await setState(ctx.chat.id, null);
+        await setState(ctx.from.id, null);
         const org = await getById(state.orgId);
         if (state.messageId) {
-            await ctx.api.editMessageText(ctx.chat.id, state.messageId, renderCard(org), sendOpts(mainKeyboard(org)))
+            await ctx.api.editMessageText(state.chatId || ctx.chat.id, state.messageId,
+                `${renderCard(org)}\n\n✏️ Відредагував(ла): ${who(ctx)}`.slice(0, 4096), sendOpts(mainKeyboard(org)))
                 .catch(() => {});
         }
-        await ctx.reply(`Збережено: ${EDIT_FIELDS[state.field]} ✅`, sendOpts(mainKeyboard(org)));
+        await ctx.reply(`Збережено: ${EDIT_FIELDS[state.field]} ✅`);
     });
 
     bot.catch(err => console.error('[telegram]', err.error || err));

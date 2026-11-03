@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import bcrypt from 'bcryptjs';
 
-const COOKIE = 'tyl_admin';
+const COOKIE = 'tyl_fond';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAGIC_TTL_MS = 15 * 60 * 1000;
 
@@ -135,18 +135,18 @@ export function createMagicLink(baseUrl, redirectPath) {
         redirect: redirectPath,
         exp: Date.now() + MAGIC_TTL_MS,
     });
-    return `${baseUrl.replace(/\/$/, '')}/admin/magic?t=${encodeURIComponent(token)}`;
+    return `${baseUrl.replace(/\/$/, '')}/fond/magic?t=${encodeURIComponent(token)}`;
 }
 
 export function magicHandler(req, res) {
     const payload = verifyToken(req.query.t);
     if (!payload || payload.sub !== 'magic' || usedNonces.has(payload.nonce)) {
-        return res.status(401).send('Посилання недійсне або вже використане. Увійдіть у /admin звичайним способом.');
+        return res.status(401).send('Посилання недійсне або вже використане. Увійдіть у /fond звичайним способом.');
     }
     usedNonces.set(payload.nonce, payload.exp);
     for (const [nonce, exp] of usedNonces) if (exp < Date.now()) usedNonces.delete(nonce);
 
     setSessionCookie(res, signToken({ sub: 'admin', exp: Date.now() + SESSION_TTL_MS }), SESSION_TTL_MS);
-    const target = typeof payload.redirect === 'string' && payload.redirect.startsWith('/admin') ? payload.redirect : '/admin';
+    const target = typeof payload.redirect === 'string' && payload.redirect.startsWith('/fond') ? payload.redirect : '/fond';
     res.redirect(302, target);
 }

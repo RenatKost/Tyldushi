@@ -24,7 +24,7 @@
             opts.headers['Content-Type'] = 'application/json';
             opts.body = JSON.stringify(body);
         }
-        const res = await fetch(`/api/admin${path}`, opts);
+        const res = await fetch(`/api/fond${path}`, opts);
         const data = await res.json().catch(() => ({}));
         if (res.status === 401 && path !== '/login') {
             showLogin();
@@ -527,7 +527,7 @@
     });
 
     async function start() {
-        const me = await fetch('/api/admin/me').then(r => r.json()).catch(() => ({}));
+        const me = await fetch('/api/fond/me').then(r => r.json()).catch(() => ({}));
         if (!me.authenticated) {
             showLogin(me.configured === false ? 'Адмін ще не налаштований: задайте ADMIN_LOGIN і ADMIN_PASSWORD на Railway.' : '');
             return;

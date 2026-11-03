@@ -24,6 +24,11 @@ app.use((req, res, next) => {
     next();
 });
 
+function noIndex(req, res, next) {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+    next();
+}
+
 app.get('/healthz', (req, res) => res.json({ ok: true }));
 
 // API is unavailable until a database is attached; the static site keeps working.
@@ -36,9 +41,9 @@ const tgHandler = telegramWebhook();
 if (tgHandler) app.post('/api/telegram/webhook', express.json(), tgHandler);
 
 app.use('/api', publicRoutes);
-app.use('/api/admin', adminRoutes);
+app.use('/api/fond', noIndex, adminRoutes);
 app.get('/media/*', mediaHandler);
-app.get('/admin/magic', magicHandler);
+app.get('/fond/magic', noIndex, magicHandler);
 
 const esc = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -75,10 +80,12 @@ app.get('/organizations/:slug', async (req, res, next) => {
     }
 });
 
-app.get('/admin', (req, res) => {
+// The admin panel lives at a non-obvious path and is never indexed or advertised in robots.txt.
+app.get(['/fond', '/fond/'], noIndex, (req, res) => {
     res.set('Cache-Control', 'no-store');
-    res.sendFile(path.join(PUBLIC_DIR, 'admin', 'index.html'));
+    res.sendFile(path.join(PUBLIC_DIR, 'fond', 'index.html'));
 });
+app.use('/fond', noIndex);
 
 app.get('/robots.txt', (req, res) => {
     res.type('text/plain').send(`User-agent: *\nDisallow: /admin\nDisallow: /api/\nSitemap: ${PUBLIC_URL}/sitemap.xml\n`);
@@ -120,8 +127,8 @@ const port = Number(process.env.PORT || 8080);
 try {
     await migrate();
 } catch (err) {
+    // Keep serving the static site even if the database is unreachable; the API will report errors.
     console.error('[db] migration failed', err);
-    process.exit(1);
 }
 
 app.listen(port, () => {
