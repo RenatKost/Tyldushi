@@ -201,7 +201,7 @@ export function telegramActivity(telegram) {
 }
 
 /** Picks the next organizations from the queue and enriches them one by one. */
-export async function enrichBatch({ limit, ids, log = console.log }) {
+export async function enrichBatch({ limit, ids, searchBudget = Infinity, log = console.log }) {
     // Only one worker runs at a time (advisory lock), so rows left in "enriching" are from an
     // interrupted run and go back to the queue.
     await query(`UPDATE organizations SET status = 'registry' WHERE status = 'enriching'`);
@@ -231,6 +231,13 @@ export async function enrichBatch({ limit, ids, log = console.log }) {
 
     let emptyStreak = [];
     for (const [i, org] of rows.entries()) {
+        // Each organization needs up to two searches; stop before the daily search budget runs out.
+        if (searchUsage.tavily + 2 > searchBudget) {
+            log(`  · daily search budget (${searchBudget}) reached, ${rows.length - i} organizations wait for tomorrow`);
+            await requeue(rows.slice(i));
+            stats.budget_reached = true;
+            break;
+        }
         try {
             const status = await enrichOne(org, log);
             stats.processed++;

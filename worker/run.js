@@ -45,6 +45,17 @@ async function importDue() {
     return rows.length === 0;
 }
 
+// Tavily's free plan gives 1000 searches a month: ~32 a day.
+const SEARCH_BUDGET = Number(process.env.SEARCH_DAILY_BUDGET || 32);
+
+async function searchBudgetLeft() {
+    const { rows } = await query(
+        `SELECT coalesce(sum((stats->>'search_requests')::int), 0)::int AS used FROM job_runs
+         WHERE job = 'enrich' AND started_at >= date_trunc('day', now())`,
+    );
+    return Math.max(0, SEARCH_BUDGET - rows[0].used);
+}
+
 async function jobDue(job, days) {
     const { rows } = await query(
         `SELECT 1 FROM job_runs WHERE job = $1 AND ok AND started_at > now() - ($2 || ' days')::interval LIMIT 1`,
@@ -72,11 +83,12 @@ async function runEnrich() {
     }
     const ids = arg('id') ? arg('id').split(',').map(Number) : null;
     const limit = arg('limit') ? Number(arg('limit')) : await remainingToday();
-    if (!ids && !limit) {
-        console.log(`[enrich] daily limit (${DAILY_LIMIT}) reached`);
+    const searchBudget = await searchBudgetLeft();
+    if (!ids && (!limit || searchBudget < 2)) {
+        console.log(`[enrich] daily limit reached (organizations ${DAILY_LIMIT}, searches ${SEARCH_BUDGET})`);
         return;
     }
-    return track('enrich', () => enrichBatch({ limit, ids }));
+    return track('enrich', () => enrichBatch({ limit, ids, searchBudget }));
 }
 
 /** Re-formats names that an older parser left with broken quotes (cheap, runs every time). */
