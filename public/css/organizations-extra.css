@@ -557,3 +557,130 @@
         position: static;
     }
 }
+
+/* ---------- Precise need search: what we understood, refine chips, related tier ---------- */
+.need-tags:has(.need-understood) {
+    display: grid;
+    gap: 0.6rem;
+}
+
+.need-understood,
+.need-refine {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.need-refine > span {
+    margin-right: 0.2rem;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+.need-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.38rem 0.8rem;
+    border-radius: 999px;
+    border: 1px solid rgba(201, 160, 106, 0.6);
+    background: #fffaf3;
+    color: var(--ink);
+    font: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: background 0.2s, border-color 0.2s, transform 0.2s;
+}
+
+.need-chip small {
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: rgba(201, 160, 106, 0.22);
+    font-size: 0.74rem;
+    font-weight: 700;
+}
+
+.need-chip:hover,
+.need-chip:focus-visible {
+    background: #f6e9d5;
+    border-color: #c9a06a;
+    transform: translateY(-1px);
+}
+
+.need-chip.is-reset {
+    border-style: dashed;
+    background: transparent;
+    color: var(--text-gray);
+}
+
+.need-related-head {
+    grid-column: 1 / -1;
+    margin-top: 1.5rem;
+    padding-top: 1.4rem;
+    border-top: 1px dashed rgba(201, 160, 106, 0.6);
+}
+
+.need-related-head h3 {
+    font-family: 'PT Serif', serif;
+    font-size: 1.35rem;
+    color: var(--ink);
+}
+
+.need-related-head p {
+    margin-top: 0.3rem;
+    font-size: 0.92rem;
+    color: var(--text-gray);
+}
+
+.org-card.is-related {
+    opacity: 0.92;
+}
+
+.org-card__hint.is-soft {
+    background: rgba(201, 160, 106, 0.1);
+    border-left-color: #c9a06a;
+}
+
+.org-card__hint.is-soft span {
+    color: #8a6a3e;
+}
+
+/* ---------- Detail page: services with evidence ---------- */
+.org-services {
+    display: grid;
+    gap: 0.9rem;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.org-services li {
+    display: flex;
+    gap: 0.75rem;
+    align-items: flex-start;
+}
+
+.org-services li > i {
+    margin-top: 0.25rem;
+    color: #1f9d61;
+}
+
+.org-services b {
+    display: block;
+    color: var(--ink);
+}
+
+.org-services q {
+    display: block;
+    margin-top: 0.2rem;
+    font-size: 0.92rem;
+    font-style: italic;
+    line-height: 1.5;
+    color: var(--text-gray);
+}
+
+.org-services a {
+    font-size: 0.82rem;
+    color: #8a6a3e;
+}

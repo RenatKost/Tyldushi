@@ -1,6 +1,7 @@
 import { query, withTransaction } from '../db.js';
 import { normalizeCategories } from './categories.js';
 import { refreshRating } from './rating.js';
+import { cleanServiceList, serviceByKey } from './services.js';
 import { slugify } from './slug.js';
 
 export const STATUSES = ['registry', 'enriching', 'pending', 'approved', 'rejected', 'rejected_auto', 'hidden'];
@@ -47,7 +48,7 @@ function cleanCases(cases) {
             happened_at: cleanDate(c?.happened_at),
             source_url: str(c?.source_url, 1000),
             kind: CASE_KINDS.includes(c?.kind) ? c.kind : 'aid',
-            source: c?.source === 'admin' ? 'admin' : 'bot',
+            source: ['admin', 'monitor'].includes(c?.source) ? c.source : 'bot',
         }))
         .filter(c => c.title)
         .slice(0, 30);
@@ -116,7 +117,47 @@ async function attachCases(org) {
         [org.id],
     );
     org.cases = rows;
+    const { rows: services } = await query(
+        `SELECT service, quote, source_url, audiences, source FROM organization_services
+         WHERE organization_id = $1 ORDER BY created_at`,
+        [org.id],
+    );
+    org.services = services.map(s => ({ ...s, label: serviceByKey[s.service]?.label || s.service }));
     return org;
+}
+
+/**
+ * Stores services found by the bot. Services an admin entered are never overwritten; bot services
+ * that are no longer confirmed are kept too (a website may simply be down), only refreshed.
+ */
+export async function saveBotServices(orgId, services) {
+    for (const s of cleanServiceList(services)) {
+        if (!s.quote) continue; // no evidence — no service
+        await query(
+            `INSERT INTO organization_services (organization_id, service, quote, source_url, audiences, source)
+             VALUES ($1, $2, $3, $4, $5, 'bot')
+             ON CONFLICT (organization_id, service) DO UPDATE
+                SET quote = EXCLUDED.quote, source_url = EXCLUDED.source_url, audiences = EXCLUDED.audiences
+                WHERE organization_services.source = 'bot'`,
+            [orgId, s.key, s.quote, s.source_url, s.audiences],
+        );
+    }
+    await query('UPDATE organizations SET services_checked_at = now() WHERE id = $1', [orgId]);
+}
+
+/** Replaces the service list from the admin editor (keys only; admin entries need no quote). */
+export async function setAdminServices(orgId, keys) {
+    const list = [...new Set((Array.isArray(keys) ? keys : []).filter(k => serviceByKey[k]))];
+    await withTransaction(async client => {
+        await client.query('DELETE FROM organization_services WHERE organization_id = $1 AND NOT (service = ANY($2::text[]))', [orgId, list]);
+        for (const key of list) {
+            await client.query(
+                `INSERT INTO organization_services (organization_id, service, source) VALUES ($1, $2, 'admin')
+                 ON CONFLICT (organization_id, service) DO NOTHING`,
+                [orgId, key],
+            );
+        }
+    });
 }
 
 export async function getPublicBySlug(slug) {
@@ -272,6 +313,7 @@ export async function updateOrg(id, data) {
         }
         if (Array.isArray(data.cases)) await replaceCases(client, id, data.cases);
     });
+    if (Array.isArray(data.services)) await setAdminServices(id, data.services);
     await refreshRating(id);
     return getById(id);
 }

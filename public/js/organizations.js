@@ -28,7 +28,7 @@
         needReset: document.getElementById('needReset'),
     };
 
-    const state = { q: '', city: '', region: '', category: '', type: '', need: '', page: 1 };
+    const state = { q: '', city: '', region: '', category: '', type: '', need: '', service: '', page: 1 };
     let categories = [];
     let total = 0;
     let requestId = 0;
@@ -160,7 +160,7 @@
     }
 
     /* ---------- URL state ---------- */
-    const QUERY_KEYS = ['q', 'city', 'region', 'category', 'type', 'need'];
+    const QUERY_KEYS = ['q', 'city', 'region', 'category', 'type', 'need', 'service'];
 
     function readQuery() {
         const p = new URLSearchParams(location.search);
@@ -201,9 +201,11 @@
         const why = matched.size
             ? `<p class="org-card__why"><i class="fas fa-check"></i>Підходить: ${[...matched].map(k => esc(category(k)?.label || k)).join(', ')}</p>` : '';
         // For a free-text request: the organization's own sentence that answers it best.
-        const hint = org.help_hint
-            ? `<div class="org-card__hint"><span><i class="fas fa-hand-holding-heart"></i>${org.help_hint.source === 'case' ? 'Вже робили' : 'Чим можуть допомогти'}</span><p>${esc(org.help_hint.text)}</p></div>`
-            : '';
+        const h = org.help_hint;
+        const hint = !h ? '' : h.source === 'service'
+            ? `<div class="org-card__hint"><span><i class="fas fa-circle-check"></i>Надають: ${esc(h.label || '')}</span>
+                ${h.text ? `<p>«${esc(h.text)}»</p>` : ''}</div>`
+            : `<div class="org-card__hint is-soft"><span><i class="fas fa-hand-holding-heart"></i>${h.source === 'case' ? 'Вже робили' : 'Чим можуть допомогти'}</span><p>${esc(h.text)}</p></div>`;
 
         return `
             <a class="org-card${org.is_featured ? ' is-featured' : ''}${org.logo_url ? ' has-logo' : ''}" href="/organizations/${encodeURIComponent(org.slug)}"
@@ -336,6 +338,7 @@
         const stopSearching = showSearching();
         const p = new URLSearchParams({ q: state.need });
         if (state.city) p.set('city', state.city);
+        if (state.service) p.set('service', state.service);
         try {
             // A short minimum keeps the animation from flashing when the answer is instant.
             const [data] = await Promise.all([
@@ -344,19 +347,15 @@
             ]);
             stopSearching();
             if (id !== requestId) return;
-            els.needTags.innerHTML = data.categories.length
-                ? `<span>Шукаємо за:</span>${data.categories.map(k => {
-                    const c = category(k);
-                    return c ? `<span class="org-tag is-primary" style="--tag:${ACCENTS[k] || DEFAULT_ACCENT}"><i class="fas ${esc(c.icon)}"></i>${esc(c.label)}</span>` : '';
-                }).join('')}`
-                : '<span>Шукаємо за ключовими словами з вашого запиту</span>';
+            els.needTags.innerHTML = needTagsHtml(data);
             els.grid.innerHTML = '';
             renderList(data.items, false);
+            renderRelated(data.related || []);
             els.count.textContent = data.items.length
-                ? `Підходять ${data.items.length} ${plural(data.items.length, 'організація', 'організації', 'організацій')} · під кожною — чим саме можуть допомогти`
+                ? `Точно підходять ${data.items.length} ${plural(data.items.length, 'організація', 'організації', 'організацій')} — з підтвердженням із їхніх джерел`
                 : '';
             setEmptyText(true);
-            els.empty.hidden = data.items.length > 0;
+            els.empty.hidden = data.items.length > 0 || (data.related || []).length > 0;
         } catch {
             stopSearching();
             if (id !== requestId) return;
@@ -365,6 +364,50 @@
         } finally {
             if (id === requestId) els.loader.hidden = true;
         }
+    }
+
+    const AUDIENCE_LABELS = {
+        veterans: 'ветеранам', military: 'військовим', families: 'родинам', children: 'дітям',
+        idp: 'переселенцям', elderly: 'літнім людям', disability: 'людям з інвалідністю',
+    };
+
+    /** What we understood from the request, plus chips to say precisely which service is needed. */
+    function needTagsHtml(data) {
+        const services = (data.suggestions || []).filter(s => s.selected);
+        const understood = services.length
+            ? services.map(s => `<span class="org-tag is-primary" style="--tag:#1f7a4e"><i class="fas fa-check"></i>${esc(s.label)}</span>`).join('')
+            : data.categories.map(k => {
+                const c = category(k);
+                return c ? `<span class="org-tag is-primary" style="--tag:${ACCENTS[k] || DEFAULT_ACCENT}"><i class="fas ${esc(c.icon)}"></i>${esc(c.label)}</span>` : '';
+            }).join('');
+        const audience = (data.audiences || []).map(a => AUDIENCE_LABELS[a]).filter(Boolean);
+        const options = (data.suggestions || []).filter(s => !s.selected);
+        return `
+            <div class="need-understood">
+                <span>Шукаємо:</span>${understood || '<span class="muted">за словами з вашого запиту</span>'}
+                ${audience.length ? `<span class="muted">· ${esc(audience.join(', '))}</span>` : ''}
+            </div>
+            ${options.length ? `
+            <div class="need-refine">
+                <span>Уточніть, що саме потрібно:</span>
+                ${options.map(s => `<button type="button" class="need-chip" data-service="${esc(s.key)}">${esc(s.label)} <small>${s.count}</small></button>`).join('')}
+                ${state.service ? '<button type="button" class="need-chip is-reset" data-service="">× усі варіанти</button>' : ''}
+            </div>` : (state.service ? '<div class="need-refine"><button type="button" class="need-chip is-reset" data-service="">× усі варіанти</button></div>' : '')}`;
+    }
+
+    /** Organizations that only share a broader direction, clearly separated from exact matches. */
+    function renderRelated(items) {
+        if (!items.length) return;
+        els.grid.insertAdjacentHTML('beforeend', `
+            <div class="need-related-head">
+                <h3>Можливо, також допоможуть</h3>
+                <p>Працюють у схожому напрямі, але ми не знайшли в їхніх джерелах саме цієї послуги — уточніть телефоном.</p>
+            </div>`);
+        const before = els.grid.children.length;
+        els.grid.insertAdjacentHTML('beforeend', items.map(cardHtml).join(''));
+        const fresh = [...els.grid.children].slice(before);
+        fresh.forEach(el => el.classList.add('is-related'));
+        if (hasGsap) window.Motion.revealCards(fresh);
     }
 
     function setEmptyText(forNeed) {
@@ -376,6 +419,7 @@
 
     function runNeed(text) {
         state.need = String(text || '').trim().slice(0, 300);
+        state.service = '';
         writeQuery();
         loadList();
         els.catalog.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -576,6 +620,27 @@
         });
     }
 
+    function servicesPanel(org) {
+        const list = org.services || [];
+        if (!list.length) return '';
+        return `
+            <div class="org-panel" data-anim>
+                <h2><i class="fas fa-list-check"></i>Послуги</h2>
+                <ul class="org-services">${list.map(s => {
+                    const src = s.source_url && safeUrl(s.source_url);
+                    return `<li>
+                        <i class="fas fa-circle-check"></i>
+                        <div>
+                            <b>${esc(s.label)}</b>
+                            ${s.quote ? `<q>${esc(s.quote)}</q>` : ''}
+                            ${src ? `<a href="${esc(src)}" target="_blank" rel="noopener nofollow">джерело <i class="fas fa-arrow-up-right-from-square"></i></a>` : ''}
+                            ${s.source === 'admin' ? '<span class="muted">· підтверджено фондом</span>' : ''}
+                        </div>
+                    </li>`;
+                }).join('')}</ul>
+            </div>`;
+    }
+
     function detailHtml(org) {
         const help = (org.help_categories || []).map(category).filter(Boolean)
             .map(c => `<div class="org-help-item"><i class="fas ${esc(c.icon)}"></i><span>${esc(c.label)}</span></div>`).join('');
@@ -602,7 +667,8 @@
                             <h2><i class="fas fa-circle-info"></i>Про організацію</h2>
                             <p class="org-description">${esc(org.description || 'Опис готується.')}</p>
                         </div>
-                        ${help ? `<div class="org-panel" data-anim><h2><i class="fas fa-hand-holding-heart"></i>Чим допомагають</h2><div class="org-help-grid">${help}</div></div>` : ''}
+                        ${servicesPanel(org)}
+                        ${help ? `<div class="org-panel" data-anim><h2><i class="fas fa-hand-holding-heart"></i>Напрями роботи</h2><div class="org-help-grid">${help}</div></div>` : ''}
                         ${timelineHtml(org)}
                         ${reviewsPanel(org)}
                     </div>
@@ -679,6 +745,7 @@
         searchTimer = setTimeout(() => {
             state.q = els.q.value.trim();
             state.need = '';
+            state.service = '';
             writeQuery();
             loadList();
         }, 300);
@@ -693,6 +760,7 @@
     els.region.addEventListener('change', () => {
         state.region = els.region.value;
         state.need = '';
+        state.service = '';
         writeQuery();
         loadList();
     });
@@ -700,6 +768,7 @@
     els.types.forEach(btn => btn.addEventListener('click', () => {
         state.type = btn.dataset.type;
         state.need = '';
+        state.service = '';
         syncControls();
         writeQuery();
         loadList();
@@ -710,6 +779,7 @@
         if (!chip) return;
         state.category = chip.dataset.key;
         state.need = '';
+        state.service = '';
         syncControls();
         writeQuery();
         loadList();
@@ -730,8 +800,17 @@
         runNeed(btn.textContent);
     });
 
+    els.needTags.addEventListener('click', e => {
+        const chip = e.target.closest('[data-service]');
+        if (!chip) return;
+        state.service = chip.dataset.service;
+        writeQuery();
+        loadNeed();
+    });
+
     els.needReset.addEventListener('click', () => {
         state.need = '';
+        state.service = '';
         els.needForm.elements.need.value = '';
         writeQuery();
         loadList();

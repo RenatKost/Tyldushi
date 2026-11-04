@@ -362,6 +362,17 @@
                         </div>
 
                         <div class="panel">
+                            <h2><i class="fas fa-list-check"></i>Послуги</h2>
+                            <p class="hint">По ним працює «Пошук по запиту»: організація потрапляє в точні результати, лише якщо має потрібну послугу. Бот додає послуги з цитатою-підтвердженням.</p>
+                            <div class="cats">
+                                ${(meta.services || []).map(s => {
+                                    const found = (org.services || []).find(x => x.service === s.key);
+                                    return `<label${found?.quote ? ` title="${esc(found.quote)}"` : ''}><input type="checkbox" name="svc" value="${esc(s.key)}" ${found ? 'checked' : ''}> ${esc(s.label)}${found?.source === 'bot' ? ' <small>(бот)</small>' : ''}</label>`;
+                                }).join('')}
+                            </div>
+                        </div>
+
+                        <div class="panel">
                             <h2><i class="fas fa-award"></i>Кейси</h2>
                             <div id="cases">${(org.cases || []).map(caseHtml).join('')}</div>
                             <button class="btn btn--sm" type="button" id="addCase" style="margin-top:.75rem"><i class="fas fa-plus"></i>Додати кейс</button>
@@ -469,6 +480,7 @@
                 description: f.description.value,
                 logo_url: f.logo_url.value,
                 help_categories: $$('input[name="cat"]:checked', form).map(cb => cb.value),
+                services: $$('input[name="svc"]:checked', form).map(cb => cb.value),
                 contacts: Object.fromEntries(CONTACT_FIELDS.map(([k]) => [k, f[`c_${k}`].value])),
                 cases: $$('.case', casesEl).map(el => Object.fromEntries($$('[data-c]', el).map(i => [i.dataset.c, i.value]))),
                 status: f.status.value,

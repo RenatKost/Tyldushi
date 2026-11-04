@@ -2,6 +2,7 @@
 // Falls back to rule-based extraction when no key is configured or the quota is exhausted.
 import { GoogleGenAI, Type } from '@google/genai';
 import { CATEGORIES, CATEGORY_KEYS, normalizeCategories } from '../../server/lib/categories.js';
+import { AUDIENCE_KEYS, cleanServiceList, SERVICE_KEYS, SERVICES } from '../../server/lib/services.js';
 
 const apiKey = process.env.GEMINI_API_KEY;
 const ai = apiKey ? new GoogleGenAI({ apiKey }) : null;
@@ -26,6 +27,20 @@ const SCHEMA = {
         city: { type: Type.STRING, description: 'City where the organization works, in Ukrainian nominative case, or empty' },
         description: { type: Type.STRING, description: '2-4 paragraphs in Ukrainian: who they are, what they do, for whom' },
         help_categories: { type: Type.ARRAY, items: { type: Type.STRING, enum: CATEGORY_KEYS } },
+        services: {
+            type: Type.ARRAY,
+            description: 'Concrete services the organization itself provides, each proven by a verbatim quote',
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    key: { type: Type.STRING, enum: SERVICE_KEYS },
+                    quote: { type: Type.STRING, description: 'verbatim sentence from the materials proving this service' },
+                    source_url: { type: Type.STRING, description: 'URL of the material the quote comes from' },
+                    audiences: { type: Type.ARRAY, items: { type: Type.STRING, enum: AUDIENCE_KEYS } },
+                },
+                required: ['key', 'quote', 'source_url'],
+            },
+        },
         cases: {
             type: Type.ARRAY,
             items: {
@@ -46,6 +61,7 @@ const SCHEMA = {
 
 function buildPrompt(org, materials) {
     const categories = CATEGORIES.map(c => `${c.key} — ${c.label}`).join('\n');
+    const serviceList = SERVICES.map(x => `${x.key} — ${x.label}`).join('\n');
     return `Ти допомагаєш вести каталог благодійних фондів і громадських організацій України.
 
 Організація з державного реєстру:
@@ -64,6 +80,11 @@ ${org.registry_purpose ? `- Мета діяльності з реєстру: ${o
   дати реєстрації чи коду ЄДРПОУ і не переказуй дані реєстру.
 - Якщо сайт у матеріалах — це медіа, каталог чи платіжний сервіс, а не сайт самої організації, не використовуй його як джерело про неї.
 - Кейси — до 5 конкретних справ (передана допомога, заходи, проєкти, звіти) з датою, якщо вона є, і типом kind. source_url має бути одним із URL у матеріалах.
+- services — конкретні послуги, які організація САМА надає зараз або надавала протягом останнього року. Для кожної —
+  дослівна цитата з матеріалів (quote) і URL цього матеріалу. Якщо послуга лише згадується (наприклад, «радимо звернутися
+  до психолога») або її надає інша організація — не додавай. Ключі послуг:
+${serviceList}
+  audiences — кому саме: ${AUDIENCE_KEYS.join(', ')}.
 - help_categories — лише ключі з цього списку:
 ${categories}
 
@@ -73,7 +94,11 @@ ${materials}`;
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-export async function structureWithLlm(org, materials) {
+/**
+ * One JSON-schema call to Gemini with model fallback, overload retry and quota handling.
+ * Returns the parsed object or null (no key, quota exhausted, or an error).
+ */
+export async function generateJson(contents, schema, { temperature = 0.2 } = {}) {
     if (!ai || llmState.quotaExhausted) return null;
     const wait = lastCall + MIN_INTERVAL_MS - Date.now();
     if (wait > 0) await sleep(wait);
@@ -87,16 +112,14 @@ export async function structureWithLlm(org, materials) {
         try {
             const res = await ai.models.generateContent({
                 model,
-                contents: buildPrompt(org, materials),
-                config: { responseMimeType: 'application/json', responseSchema: SCHEMA, temperature: 0.2 },
+                contents,
+                config: { responseMimeType: 'application/json', responseSchema: schema, temperature },
             });
             llmState.calls++;
             llmState.model = model;
             // Stick to a model that works for the rest of the run instead of retrying an overloaded one.
             modelIndex = index;
-            const data = JSON.parse(res.text);
-            data.help_categories = normalizeCategories(data.help_categories);
-            return data;
+            return JSON.parse(res.text);
         } catch (err) {
             const status = err.status || err.code || 0;
             const message = String(err.message || err);
@@ -129,6 +152,16 @@ export async function structureWithLlm(org, materials) {
     }
     return null;
 }
+
+export async function structureWithLlm(org, materials) {
+    const data = await generateJson(buildPrompt(org, materials), SCHEMA);
+    if (!data) return null;
+    data.help_categories = normalizeCategories(data.help_categories);
+    data.services = cleanServiceList(data.services);
+    return data;
+}
+
+export { Type };
 
 /* ---------- rule-based fallback ---------- */
 

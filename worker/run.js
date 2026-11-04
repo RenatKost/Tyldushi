@@ -4,11 +4,12 @@
 //   node worker/run.js import [--limit 200]
 //   node worker/run.js regions      tax register → region of every organization
 //   node worker/run.js enrich [--limit 5] [--id 12,13]
-//   node worker/run.js activity     re-read Telegram channels of published organizations
+//   node worker/run.js monitor      Telegram (daily), sites/YouTube/news (weekly) → activity feed
 //   node worker/run.js ratings      recompute activity index
 //   node worker/run.js logos [--limit 50]
 import { migrate, pool, query } from '../server/db.js';
-import { refreshRatings, refreshTelegramActivity } from './activity.js';
+import { refreshRatings } from './activity.js';
+import { backfillServices, processItems, scanTelegram, scanWeb } from './monitor.js';
 import { enrichBatch, refreshLogos } from './enrich/index.js';
 import { searchConfigured } from './enrich/search.js';
 import { prettifyName } from './names.js';
@@ -131,7 +132,15 @@ async function main() {
     if (command === 'all') await safe('names', repairNames);
     if (command === 'logos' || command === 'all') await safe('logos', runLogos);
     if (command === 'enrich' || command === 'all') await runEnrich();
-    if (command === 'activity' || command === 'all') await safe('activity', () => track('activity', () => refreshTelegramActivity()));
+    // Monitoring: Telegram daily, sites/YouTube/news weekly, then Gemini turns new posts into cases.
+    if (command === 'monitor' || command === 'all') {
+        await safe('monitor', () => track('monitor', async () => ({
+            telegram: await scanTelegram(),
+            web: await scanWeb(),
+            services: await backfillServices(),
+            processed: await processItems(),
+        })));
+    }
     if (command === 'ratings' || command === 'all') await safe('ratings', () => track('ratings', refreshRatings));
 }
 

@@ -87,8 +87,9 @@ router.get('/levels', (req, res) => {
 router.get('/organizations/match', wrap(async (req, res) => {
     const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 300) : '';
     const city = typeof req.query.city === 'string' ? req.query.city : undefined;
+    const service = typeof req.query.service === 'string' ? req.query.service : undefined;
     res.set('Cache-Control', 'public, max-age=60');
-    res.json(await matchOrganizations(q, { city }));
+    res.json(await matchOrganizations(q, { city, service }));
 }));
 
 router.get('/organizations/:slug/reviews', wrap(async (req, res) => {

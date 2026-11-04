@@ -3,6 +3,7 @@ import multer from 'multer';
 import { loginHandler, logoutHandler, isAuthenticated, isAdminConfigured, requireAdmin } from '../auth.js';
 import { query } from '../db.js';
 import { CATEGORIES } from '../lib/categories.js';
+import { SERVICES } from '../lib/services.js';
 import {
     adminCounts, adminList, createOrg, deleteOrgs, getById, reorderFeatured,
     setFeatured, setStatus, STATUSES, updateOrg,
@@ -39,7 +40,7 @@ router.get('/meta', wrap(async (req, res) => {
         `SELECT job, started_at, finished_at, ok, stats, error FROM job_runs ORDER BY id DESC LIMIT 10`,
     );
     const counts = { ...(await adminCounts()), requests_new: (await requestCounts()).new };
-    res.json({ counts, categories: CATEGORIES, cities, statuses: STATUSES, storageEnabled, runs });
+    res.json({ counts, categories: CATEGORIES, services: SERVICES.map(({ key, label, category }) => ({ key, label, category })), cities, statuses: STATUSES, storageEnabled, runs });
 }));
 
 router.get('/organizations', wrap(async (req, res) => {

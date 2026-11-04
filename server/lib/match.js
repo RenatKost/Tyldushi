@@ -3,6 +3,7 @@
 // dictionary does not understand, Gemini (free tier, no web search) is asked once and the answer cached.
 import { query } from '../db.js';
 import { CATEGORY_KEYS } from './categories.js';
+import { AUDIENCE_KEYS, detectServices, SERVICE_KEYS, SERVICES, serviceByKey } from './services.js';
 
 // Word stems (lower case, Ukrainian and Russian) that point to a help category.
 const CATEGORY_HINTS = {
@@ -54,7 +55,8 @@ export function interpretByRules(q) {
         .filter(w => w.length >= 4 && !STOP.has(w) && !isGeneric(w))
         .map(w => (w.length > 6 ? w.slice(0, w.length - 2) : w)))]
         .slice(0, 8);
-    return { categories: [...categories], keywords };
+    const { services, audiences } = detectServices(text);
+    return { categories: [...categories], keywords, services, audiences };
 }
 
 /* ---------- Gemini (optional) ---------- */
@@ -82,25 +84,34 @@ async function interpretByAi(q) {
         const res = await client.models.generateContent({
             model: process.env.GEMINI_MATCH_MODEL || 'gemini-flash-lite-latest',
             contents: `Людина шукає допомогу благодійної або громадської організації в Україні. Її запит: «${q}».
-Визнач, які напрями допомоги їй підходять (лише ключі зі списку: ${CATEGORY_KEYS.join(', ')}),
-і до 6 коротких ключових слів українською (основи слів без закінчень), за якими варто шукати в описах організацій.`,
+Визнач:
+- services — 1–3 конкретні послуги, які їй потрібні (лише ключі зі списку нижче; не додавай «про всяк випадок»);
+- audiences — для кого допомога (${AUDIENCE_KEYS.join(', ')});
+- categories — ширші напрями (${CATEGORY_KEYS.join(', ')});
+- keywords — до 5 коротких основ слів українською для пошуку в описах.
+Послуги:
+${SERVICES.map(s => `${s.key} — ${s.label}`).join('; ')}`,
             config: {
                 responseMimeType: 'application/json',
                 temperature: 0,
                 responseSchema: {
                     type: Type.OBJECT,
                     properties: {
+                        services: { type: Type.ARRAY, items: { type: Type.STRING, enum: SERVICE_KEYS } },
+                        audiences: { type: Type.ARRAY, items: { type: Type.STRING, enum: AUDIENCE_KEYS } },
                         categories: { type: Type.ARRAY, items: { type: Type.STRING, enum: CATEGORY_KEYS } },
                         keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
                     },
-                    required: ['categories', 'keywords'],
+                    required: ['services', 'audiences', 'categories', 'keywords'],
                 },
             },
         });
         const data = JSON.parse(res.text);
         return {
+            services: (data.services || []).filter(k => SERVICE_KEYS.includes(k)).slice(0, 3),
+            audiences: (data.audiences || []).filter(k => AUDIENCE_KEYS.includes(k)),
             categories: (data.categories || []).filter(k => CATEGORY_KEYS.includes(k)),
-            keywords: (data.keywords || []).map(k => normalizeQuery(k)).filter(k => k.length >= 3 && !isGeneric(k)).slice(0, 6),
+            keywords: (data.keywords || []).map(k => normalizeQuery(k)).filter(k => k.length >= 3 && !isGeneric(k)).slice(0, 5),
         };
     } catch (err) {
         // Quota or overload: stop asking for a while, the dictionary keeps working.
@@ -114,7 +125,7 @@ const AI_WAIT_MS = Number(process.env.MATCH_AI_WAIT_MS || 1500);
 /** Combines the dictionary with a cached Gemini interpretation. */
 export async function interpret(q) {
     const key = normalizeQuery(q);
-    if (!key) return { categories: [], keywords: [], via: 'empty' };
+    if (!key) return { categories: [], keywords: [], services: [], audiences: [], via: 'empty' };
     const rules = interpretByRules(key);
 
     const { rows } = await query(`SELECT result FROM query_cache WHERE query = $1 AND created_at > now() - interval '30 days'`, [key]);
@@ -131,19 +142,42 @@ export async function interpret(q) {
         }).catch(() => null);
         ai = await Promise.race([pending, new Promise(resolve => setTimeout(() => resolve(null), AI_WAIT_MS))]);
     }
+    // The dictionary is precise when it recognises a service; Gemini fills the gaps for free wording.
+    const services = rules.services.length ? [...new Set([...rules.services, ...(ai?.services || [])])].slice(0, 4) : (ai?.services || []);
+    const categories = [...new Set([
+        ...rules.categories, ...(ai?.categories || []),
+        ...services.map(k => serviceByKey[k]?.category).filter(Boolean),
+    ])];
     return {
-        categories: [...new Set([...rules.categories, ...(ai?.categories || [])])],
+        services,
+        audiences: [...new Set([...rules.audiences, ...(ai?.audiences || [])])],
+        categories,
         keywords: [...new Set([...rules.keywords, ...(ai?.keywords || []).filter(k => !isGeneric(k))])].slice(0, 10),
         via: ai ? 'ai' : 'rules',
     };
 }
 
-/** Ranks published organizations against an interpreted request. */
-export async function matchOrganizations(q, { city, limit = 30 } = {}) {
+/**
+ * Ranks published organizations against a request in two tiers:
+ *  - items:   organizations that provide one of the requested services (with evidence);
+ *  - related: organizations that only share a broader direction ("Можливо, також допоможуть").
+ * `service` (a chip the person clicked) narrows the request to one exact service.
+ */
+export async function matchOrganizations(q, { city, service } = {}) {
     const meaning = await interpret(q);
-    if (!meaning.categories.length && !meaning.keywords.length) return { ...meaning, items: [], total: 0 };
+    if (service && serviceByKey[service]) {
+        meaning.services = [service];
+        meaning.categories = [...new Set([serviceByKey[service].category, ...meaning.categories])];
+    }
+    const empty = { ...meaning, items: [], related: [], suggestions: [], total: 0 };
+    if (!meaning.services.length && !meaning.categories.length && !meaning.keywords.length) return empty;
 
-    const params = [meaning.categories, meaning.keywords.map(k => `%${k}%`)];
+    // A request without a concrete service ("гуманітарна допомога") searches all services of its directions.
+    const wanted = meaning.services.length
+        ? meaning.services
+        : SERVICES.filter(s => meaning.categories.includes(s.category)).map(s => s.key);
+
+    const params = [wanted, meaning.audiences, meaning.categories, meaning.keywords.map(k => `%${k}%`)];
     let cityFilter = '';
     if (city) {
         params.push(city);
@@ -152,12 +186,19 @@ export async function matchOrganizations(q, { city, limit = 30 } = {}) {
     const { rows } = await query(
         `WITH scored AS (
             SELECT o.id,
-                   cardinality(ARRAY(SELECT unnest(o.help_categories) INTERSECT SELECT unnest($1::text[]))) AS cat_hits,
-                   (SELECT count(*) FROM unnest($2::text[]) k
+                   (SELECT count(*) FROM organization_services s
+                     WHERE s.organization_id = o.id AND s.service = ANY($1::text[]))::int AS svc_hits,
+                   (SELECT count(*) FROM organization_services s
+                     WHERE s.organization_id = o.id AND s.service = ANY($1::text[]) AND s.audiences && $2::text[])::int AS aud_hits,
+                   (SELECT json_agg(json_build_object('service', s.service, 'quote', s.quote, 'source_url', s.source_url))
+                      FROM organization_services s
+                     WHERE s.organization_id = o.id AND s.service = ANY($1::text[])) AS matched_services,
+                   cardinality(ARRAY(SELECT unnest(o.help_categories) INTERSECT SELECT unnest($3::text[]))) AS cat_hits,
+                   (SELECT count(*) FROM unnest($4::text[]) k
                      WHERE lower(o.name || ' ' || coalesce(o.description, '') || ' ' || coalesce(
                         (SELECT string_agg(c.title || ' ' || coalesce(c.description, ''), ' ')
                            FROM organization_cases c WHERE c.organization_id = o.id), '')) LIKE k)::int AS word_hits,
-                   ARRAY(SELECT unnest(o.help_categories) INTERSECT SELECT unnest($1::text[])) AS matched
+                   ARRAY(SELECT unnest(o.help_categories) INTERSECT SELECT unnest($3::text[])) AS matched
             FROM organizations o
             WHERE o.status = 'approved' ${cityFilter}
         )
@@ -169,18 +210,63 @@ export async function matchOrganizations(q, { city, limit = 30 } = {}) {
                ARRAY(SELECT c.title || '. ' || coalesce(c.description, '') FROM organization_cases c
                      WHERE c.organization_id = o.id ORDER BY c.happened_at DESC NULLS LAST LIMIT 10) AS case_texts,
                (SELECT count(*)::int FROM organization_cases c WHERE c.organization_id = o.id) AS cases_count,
-               s.matched, (s.cat_hits * 3 + s.word_hits + o.activity_score / 25.0) AS relevance
+               s.matched, s.matched_services, s.svc_hits, s.cat_hits, s.word_hits,
+               (s.svc_hits * 10 + s.aud_hits * 3 + s.word_hits * 2 + s.cat_hits + o.activity_score / 20.0) AS relevance
         FROM scored s JOIN organizations o ON o.id = s.id
-        WHERE s.cat_hits > 0 OR s.word_hits > 0
+        WHERE s.svc_hits > 0 OR s.cat_hits > 0 OR s.word_hits > 0
         ORDER BY relevance DESC, o.activity_score DESC, o.name
-        LIMIT ${Math.min(Math.max(Number(limit) || 30, 1), 60)}`,
+        LIMIT 80`,
         params,
     );
-    const items = rows.map(({ full_description, case_texts, ...org }) => ({
-        ...org,
-        help_hint: helpHint(full_description, case_texts, meaning),
-    }));
-    return { ...meaning, items, total: items.length };
+
+    const toCard = ({ full_description, case_texts, matched_services, svc_hits, cat_hits, word_hits, ...org }) => {
+        const evidence = (matched_services || []).find(m => m.quote) || (matched_services || [])[0];
+        const hint = evidence
+            ? {
+                source: 'service',
+                label: serviceByKey[evidence.service]?.label,
+                text: evidence.quote || null,
+                url: evidence.source_url || null,
+            }
+            : helpHint(full_description, case_texts, meaning);
+        return { ...org, services_matched: (matched_services || []).map(m => m.service), help_hint: hint };
+    };
+
+    const exact = rows.filter(r => r.svc_hits > 0).slice(0, 30).map(toCard);
+    // Related: shares a requested direction AND mentions something from the request, so it is not random.
+    const related = rows
+        .filter(r => r.svc_hits === 0 && r.cat_hits > 0 && (r.word_hits > 0 || !meaning.keywords.length))
+        .slice(0, 9)
+        .map(toCard);
+
+    return { ...meaning, items: exact, related, suggestions: await suggestServices(meaning, wanted, city), total: exact.length };
+}
+
+/**
+ * Chips that help to say precisely what is needed: services of the requested directions that at
+ * least one published organization actually provides.
+ */
+async function suggestServices(meaning, wanted, city) {
+    const pool = SERVICES.filter(s => meaning.categories.includes(s.category) || wanted.includes(s.key)).map(s => s.key);
+    if (!pool.length) return [];
+    const params = [pool];
+    let cityFilter = '';
+    if (city) {
+        params.push(city);
+        cityFilter = `AND o.city = $2`;
+    }
+    const { rows } = await query(
+        `SELECT s.service, count(DISTINCT s.organization_id)::int AS n
+         FROM organization_services s JOIN organizations o ON o.id = s.organization_id
+         WHERE o.status = 'approved' AND s.service = ANY($1::text[]) ${cityFilter}
+         GROUP BY s.service ORDER BY n DESC`,
+        params,
+    );
+    const selected = new Set(meaning.services);
+    return rows
+        .filter(r => !(selected.size === 1 && selected.has(r.service)))
+        .slice(0, 8)
+        .map(r => ({ key: r.service, label: serviceByKey[r.service].label, count: r.n, selected: selected.has(r.service) }));
 }
 
 /**

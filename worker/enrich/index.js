@@ -1,6 +1,6 @@
 // Enrichment pipeline for one organization: search → pick links → crawl → structure → save.
 import { query } from '../../server/db.js';
-import { updateOrg } from '../../server/lib/orgs.js';
+import { saveBotServices, updateOrg } from '../../server/lib/orgs.js';
 import { normalizeCity } from '../geo.js';
 import { extractPage, fetchHtml, hostOf, readTelegramChannel } from './crawl.js';
 import { llmState, structureWithLlm, structureWithRules } from './llm.js';
@@ -173,6 +173,8 @@ export async function enrichOne(org, log = console.log) {
     }
 
     await updateOrg(org.id, patch);
+    // Services count only with a quote from a known material.
+    await saveBotServices(org.id, (profile.services || []).filter(sv => sv.quote && (!sv.source_url || urls.has(sv.source_url))));
 
     // No manual moderation: anything with confirmed information is published right away.
     const confidence = Math.max(0, Math.min(1, Number(profile.confidence) || 0));
