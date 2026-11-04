@@ -200,6 +200,10 @@
         const cases = org.cases_count ? `<span class="org-card__cases"><i class="fas fa-award"></i>${org.cases_count} ${plural(org.cases_count, 'справа', 'справи', 'справ')}</span>` : '';
         const why = matched.size
             ? `<p class="org-card__why"><i class="fas fa-check"></i>Підходить: ${[...matched].map(k => esc(category(k)?.label || k)).join(', ')}</p>` : '';
+        // For a free-text request: the organization's own sentence that answers it best.
+        const hint = org.help_hint
+            ? `<div class="org-card__hint"><span><i class="fas fa-hand-holding-heart"></i>${org.help_hint.source === 'case' ? 'Вже робили' : 'Чим можуть допомогти'}</span><p>${esc(org.help_hint.text)}</p></div>`
+            : '';
 
         return `
             <a class="org-card${org.is_featured ? ' is-featured' : ''}${org.logo_url ? ' has-logo' : ''}" href="/organizations/${encodeURIComponent(org.slug)}"
@@ -217,7 +221,7 @@
                 </div>
                 ${activityHtml(org)}
                 ${why}
-                ${excerpt ? `<p class="org-card__excerpt">${esc(excerpt)}</p>` : ''}
+                ${hint || (excerpt ? `<p class="org-card__excerpt">${esc(excerpt)}</p>` : '')}
                 ${tags ? `<div class="org-tags">${tags}${more}</div>` : ''}
                 <div class="org-card__foot">
                     <div class="org-card__links">${links}</div>
@@ -256,6 +260,7 @@
         const id = ++requestId;
         if (!append) state.page = 1;
         els.needResult.hidden = true;
+        setEmptyText(false);
         const p = new URLSearchParams({ page: state.page, limit: 24 });
         for (const key of ['q', 'city', 'region', 'category', 'type']) if (state[key]) p.set(key, state[key]);
 
@@ -281,17 +286,63 @@
     }
 
     /* ---------- "Пошук по запиту" ---------- */
+    const SEARCH_STEPS = [
+        'Розбираємо ваш запит…',
+        'Визначаємо, яка допомога потрібна…',
+        'Перевіряємо організації та їхні справи…',
+        'Підбираємо тих, хто справді може допомогти…',
+    ];
+
+    /** Shown instead of the catalog while a request is being matched, so nothing misleading is on screen. */
+    function showSearching() {
+        els.grid.innerHTML = `
+            <div class="need-searching" role="status" aria-live="polite">
+                <div class="need-searching__mark" aria-hidden="true">
+                    <span class="need-searching__ring"></span>
+                    <span class="need-searching__ring need-searching__ring--2"></span>
+                    <img src="/images/phoenix-sm.webp" alt="">
+                </div>
+                <p class="need-searching__title">Шукаємо організації під ваш запит</p>
+                <p class="need-searching__step">${SEARCH_STEPS[0]}</p>
+                <div class="need-searching__dots" aria-hidden="true"><span></span><span></span><span></span></div>
+            </div>`;
+        const step = els.grid.querySelector('.need-searching__step');
+        let i = 0;
+        const timer = setInterval(() => {
+            i = (i + 1) % SEARCH_STEPS.length;
+            if (!step.isConnected) return clearInterval(timer);
+            if (hasGsap) {
+                gsap.to(step, { autoAlpha: 0, y: -6, duration: 0.2, onComplete: () => {
+                    step.textContent = SEARCH_STEPS[i];
+                    gsap.fromTo(step, { autoAlpha: 0, y: 6 }, { autoAlpha: 1, y: 0, duration: 0.25 });
+                } });
+            } else {
+                step.textContent = SEARCH_STEPS[i];
+            }
+        }, 1100);
+        if (hasGsap) gsap.fromTo(els.grid.firstElementChild, { autoAlpha: 0, scale: 0.96 }, { autoAlpha: 1, scale: 1, duration: 0.4 });
+        return () => clearInterval(timer);
+    }
+
     async function loadNeed() {
         const id = ++requestId;
-        els.loader.hidden = false;
+        els.loader.hidden = true;
         els.more.hidden = true;
+        els.empty.hidden = true;
+        els.count.textContent = '';
         els.needResult.hidden = false;
         els.needQuery.textContent = state.need;
-        els.needTags.innerHTML = '';
+        els.needTags.innerHTML = '<span class="muted">Аналізуємо запит…</span>';
+        const stopSearching = showSearching();
         const p = new URLSearchParams({ q: state.need });
         if (state.city) p.set('city', state.city);
         try {
-            const data = await getJSON(`${API}/organizations/match?${p}`);
+            // A short minimum keeps the animation from flashing when the answer is instant.
+            const [data] = await Promise.all([
+                getJSON(`${API}/organizations/match?${p}`),
+                new Promise(resolve => setTimeout(resolve, 900)),
+            ]);
+            stopSearching();
             if (id !== requestId) return;
             els.needTags.innerHTML = data.categories.length
                 ? `<span>Шукаємо за:</span>${data.categories.map(k => {
@@ -299,17 +350,28 @@
                     return c ? `<span class="org-tag is-primary" style="--tag:${ACCENTS[k] || DEFAULT_ACCENT}"><i class="fas ${esc(c.icon)}"></i>${esc(c.label)}</span>` : '';
                 }).join('')}`
                 : '<span>Шукаємо за ключовими словами з вашого запиту</span>';
+            els.grid.innerHTML = '';
             renderList(data.items, false);
             els.count.textContent = data.items.length
-                ? `Підходять ${data.items.length} ${plural(data.items.length, 'організація', 'організації', 'організацій')}`
+                ? `Підходять ${data.items.length} ${plural(data.items.length, 'організація', 'організації', 'організацій')} · під кожною — чим саме можуть допомогти`
                 : '';
+            setEmptyText(true);
             els.empty.hidden = data.items.length > 0;
         } catch {
+            stopSearching();
             if (id !== requestId) return;
+            els.grid.innerHTML = '';
             els.count.textContent = 'Не вдалося виконати пошук. Спробуйте ще раз.';
         } finally {
             if (id === requestId) els.loader.hidden = true;
         }
+    }
+
+    function setEmptyText(forNeed) {
+        els.empty.querySelector('h3').textContent = forNeed ? 'Поки не знайшли організацій під цей запит' : 'Поки нічого не знайдено';
+        els.empty.querySelector('p').innerHTML = forNeed
+            ? 'Спробуйте описати ситуацію інакше або оберіть напрям нижче. Також можна зателефонувати нам: <a href="tel:+380965051991">+380 96 505 19 91</a> — підкажемо, куди звернутися.'
+            : 'Спробуйте змінити місто чи категорію. Каталог постійно поповнюється.';
     }
 
     function runNeed(text) {
