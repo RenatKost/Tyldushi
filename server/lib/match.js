@@ -109,7 +109,7 @@ async function interpretByAi(q) {
     }
 }
 
-const AI_WAIT_MS = Number(process.env.MATCH_AI_WAIT_MS || 2500);
+const AI_WAIT_MS = Number(process.env.MATCH_AI_WAIT_MS || 1500);
 
 /** Combines the dictionary with a cached Gemini interpretation. */
 export async function interpret(q) {
@@ -120,7 +120,7 @@ export async function interpret(q) {
     const { rows } = await query(`SELECT result FROM query_cache WHERE query = $1 AND created_at > now() - interval '30 days'`, [key]);
     let ai = rows[0]?.result || null;
     if (!ai && key.split(' ').length >= 2) {
-        // Gemini can take tens of seconds when overloaded. People get the dictionary result right away;
+        // Gemini can take tens of seconds when overloaded. People get the dictionary result within ~1.5 s;
         // a late answer is still cached, so the same request is refined next time.
         const pending = interpretByAi(key).then(async result => {
             if (result) {
