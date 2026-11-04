@@ -56,7 +56,7 @@ const SCHEMA = {
             },
         },
     },
-    required: ['match_ok', 'is_active', 'confidence', 'description', 'help_categories', 'cases'],
+    required: ['match_ok', 'is_active', 'confidence', 'description', 'help_categories', 'services', 'cases'],
 };
 
 function buildPrompt(org, materials) {

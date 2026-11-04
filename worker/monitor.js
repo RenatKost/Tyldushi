@@ -269,6 +269,47 @@ export async function processItems({ maxCalls = Number(process.env.MONITOR_LLM_D
 
 /* ---------- Services for organizations enriched before the service catalog existed ---------- */
 
+const SERVICES_SCHEMA = {
+    type: Type.OBJECT,
+    properties: {
+        services: {
+            type: Type.ARRAY,
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    key: { type: Type.STRING, enum: SERVICE_KEYS },
+                    quote: { type: Type.STRING, description: 'verbatim sentence from the materials proving this service' },
+                    source_url: { type: Type.STRING, description: 'URL of the material, or empty for the catalog description' },
+                    audiences: { type: Type.ARRAY, items: { type: Type.STRING, enum: AUDIENCE_KEYS } },
+                },
+                required: ['key', 'quote', 'source_url', 'audiences'],
+            },
+        },
+    },
+    required: ['services'],
+};
+
+/** A small focused call: only the services an organization provides, each with a verbatim quote. */
+async function extractServices(org, materials) {
+    const list = SERVICES.map(s => `${s.key} — ${s.label}`).join('\n');
+    const data = await generateJson(`Організація: ${displayName(org)} (${org.city || org.region || 'Україна'}).
+Визнач, які послуги з довідника ця організація САМА надає людям. Для кожної послуги дай дослівну цитату з матеріалів
+(quote), яка це підтверджує, і URL матеріалу (source_url; для опису з каталогу — порожньо).
+Не додавай послугу, якщо вона лише згадується, її надає інша організація або її доводиться вгадувати.
+audiences — кому саме: ${AUDIENCE_KEYS.join(', ')} (порожньо, якщо не сказано).
+
+ДОВІДНИК ПОСЛУГ:
+${list}
+
+МАТЕРІАЛИ:
+${materials}`, SERVICES_SCHEMA, { temperature: 0.1 });
+    if (!data) return null;
+    const text = materials.toLowerCase().replace(/\s+/g, ' ');
+    // The quote must really be in the materials: protects the catalog from invented evidence.
+    return cleanServiceList(data.services).filter(s => s.quote
+        && text.includes(s.quote.toLowerCase().replace(/\s+/g, ' ').slice(0, 60)));
+}
+
 export async function backfillServices({ limit = 10, log = console.log } = {}) {
     const { rows } = await query(
         `SELECT * FROM organizations
@@ -300,13 +341,11 @@ export async function backfillServices({ limit = 10, log = console.log } = {}) {
             const tg = await readTelegramChannel(contacts.telegram).catch(() => null);
             if (tg) parts.push(`TELEGRAM ${tg.url}\n${tg.description}\n${tg.posts.map(p => `${p.url}\n${p.text.slice(0, 600)}`).join('\n---\n')}`);
         }
-        const { structureWithLlm } = await import('./enrich/llm.js');
-        const profile = await structureWithLlm(org, parts.join('\n\n=====\n\n').slice(0, 25000));
-        if (!profile) break;
-        await saveBotServices(org.id, (profile.services || []).filter(s => s.quote));
-        found += (profile.services || []).filter(s => s.quote).length;
-        await refreshRating(org.id);
-        log(`  services #${org.id}: ${(profile.services || []).map(s => s.key).join(', ') || '—'}`);
+        const services = await extractServices(org, parts.join('\n\n=====\n\n').slice(0, 25000));
+        if (!services) break;
+        await saveBotServices(org.id, services);
+        found += services.length;
+        log(`  services #${org.id}: ${services.map(s => s.key).join(', ') || '—'}`);
     }
     return { organizations: rows.length, services: found };
 }
