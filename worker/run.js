@@ -45,6 +45,14 @@ async function importDue() {
     return rows.length === 0;
 }
 
+async function jobDue(job, days) {
+    const { rows } = await query(
+        `SELECT 1 FROM job_runs WHERE job = $1 AND ok AND started_at > now() - ($2 || ' days')::interval LIMIT 1`,
+        [job, String(days)],
+    );
+    return rows.length === 0;
+}
+
 async function remainingToday() {
     const { rows } = await query(
         `SELECT count(*)::int AS n FROM organizations WHERE enriched_at >= date_trunc('day', now())`,
@@ -107,6 +115,7 @@ async function main() {
         await safe('regions', () => track('regions', () => importRegions()));
     }
     if (command === 'regions') await track('regions', () => importRegions());
+    else if (command === 'all' && (await jobDue('regions', 30))) await safe('regions', () => track('regions', () => importRegions()));
     if (command === 'all') await safe('names', repairNames);
     if (command === 'logos' || command === 'all') await safe('logos', runLogos);
     if (command === 'enrich' || command === 'all') await runEnrich();
