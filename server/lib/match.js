@@ -32,6 +32,12 @@ const STOP = new Set(['потрібна', 'потрібен', 'потрібно'
     'моя', 'мій', 'моє', 'наша', 'наш', 'наші', 'щоб', 'чтобы', 'або', 'или', 'також', 'можна', 'можете', 'будь', 'ласка', 'дуже',
     'після', 'того', 'цього', 'взяти', 'знайти', 'отримати', 'де', 'має', 'мають', 'була', 'були', 'було', 'есть', 'якщо', 'если', 'одеса', 'одесі', 'одессе', 'одесса', 'місті', 'безкоштовно', 'безкоштовна']);
 
+// Stems that appear in almost every description and would match everything.
+const GENERIC_STEMS = ['допом', 'підтрим', 'організ', 'фонд', 'благод', 'громад', 'волонт', 'люд', 'діяльн', 'україн',
+    'проєкт', 'проект', 'потреб', 'соціальн', 'сприя', 'надан', 'помощ', 'послуг'];
+
+const isGeneric = word => GENERIC_STEMS.some(stem => word.startsWith(stem) || stem.startsWith(word));
+
 export function normalizeQuery(q) {
     return String(q || '').toLowerCase().replace(/[^\p{L}\p{N}'’ʼ\s-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
 }
@@ -45,7 +51,7 @@ export function interpretByRules(q) {
     }
     for (const key of [...categories]) for (const extra of IMPLIES[key] || []) categories.add(extra);
     const keywords = [...new Set(text.split(/[\s-]+/)
-        .filter(w => w.length >= 4 && !STOP.has(w))
+        .filter(w => w.length >= 4 && !STOP.has(w) && !isGeneric(w))
         .map(w => (w.length > 6 ? w.slice(0, w.length - 2) : w)))]
         .slice(0, 8);
     return { categories: [...categories], keywords };
@@ -94,7 +100,7 @@ async function interpretByAi(q) {
         const data = JSON.parse(res.text);
         return {
             categories: (data.categories || []).filter(k => CATEGORY_KEYS.includes(k)),
-            keywords: (data.keywords || []).map(k => normalizeQuery(k)).filter(k => k.length >= 3).slice(0, 6),
+            keywords: (data.keywords || []).map(k => normalizeQuery(k)).filter(k => k.length >= 3 && !isGeneric(k)).slice(0, 6),
         };
     } catch (err) {
         // Quota or overload: stop asking for a while, the dictionary keeps working.
@@ -120,7 +126,7 @@ export async function interpret(q) {
     }
     return {
         categories: [...new Set([...rules.categories, ...(ai?.categories || [])])],
-        keywords: [...new Set([...rules.keywords, ...(ai?.keywords || [])])].slice(0, 10),
+        keywords: [...new Set([...rules.keywords, ...(ai?.keywords || []).filter(k => !isGeneric(k))])].slice(0, 10),
         via: ai ? 'ai' : 'rules',
     };
 }
