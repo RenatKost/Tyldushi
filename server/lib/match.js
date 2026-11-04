@@ -250,7 +250,10 @@ export async function matchOrganizations(q, { city, service } = {}) {
  * least one published organization actually provides.
  */
 async function suggestServices(meaning, wanted, city) {
-    const pool = SERVICES.filter(s => meaning.categories.includes(s.category) || wanted.includes(s.key)).map(s => s.key);
+    // A recognised service ("психолог") narrows the chips to its own direction, not everything around it.
+    const primary = meaning.services.map(k => serviceByKey[k]?.category).filter(Boolean);
+    const scope = primary.length ? primary : meaning.categories;
+    const pool = SERVICES.filter(s => scope.includes(s.category) || wanted.includes(s.key)).map(s => s.key);
     if (!pool.length) return [];
     const params = [pool];
     let cityFilter = '';
