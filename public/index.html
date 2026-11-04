@@ -7,13 +7,18 @@
     <meta name="description" content="Благодійний фонд «Тил Душі»: безкоштовна психологічна реабілітація, супровід, консультації щодо документів, медичне перенаправлення та грантова підтримка для ветеранів та їхніх родин. Одеса, Французький бульвар 9.">
     <link rel="canonical" href="https://tyldushi.com/">
     <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Тил Душі">
+    <meta property="og:locale" content="uk_UA">
     <meta property="og:title" content="Тил Душі — психосоціальна підтримка ветеранів та їхніх родин">
     <meta property="og:description" content="Місце, де кожен знаходить опору. Усі послуги безкоштовні.">
     <meta property="og:url" content="https://tyldushi.com/">
     <meta property="og:image" content="https://tyldushi.com/images/og.jpg">
     <meta name="theme-color" content="#1c1424">
-    <link rel="icon" href="/images/favicon.ico" sizes="any">
+    <link rel="icon" href="/favicon.ico" sizes="48x48">
+    <link rel="icon" href="/images/favicon-96.png" type="image/png" sizes="96x96">
+    <link rel="icon" href="/images/favicon-192.png" type="image/png" sizes="192x192">
     <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Marck+Script&family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
@@ -23,21 +28,148 @@
     <script type="application/ld+json">
     {
         "@context": "https://schema.org",
-        "@type": "NGO",
-        "name": "Благодійний фонд «Тил Душі»",
-        "alternateName": "Tyl Dushi",
-        "url": "https://tyldushi.com",
-        "logo": "https://tyldushi.com/images/icon-512.png",
-        "description": "Психосоціальна підтримка ветеранів та їхніх родин. Усі послуги безкоштовні.",
-        "telephone": "+380965051991",
-        "taxID": "46068117",
-        "address": {
-            "@type": "PostalAddress",
-            "streetAddress": "Французький бульвар, 9",
-            "addressLocality": "Одеса",
-            "addressCountry": "UA"
-        },
-        "sameAs": ["https://www.instagram.com/tyl_dushi"]
+        "@graph": [
+            {
+                "@type": "WebSite",
+                "@id": "https://tyldushi.com/#website",
+                "url": "https://tyldushi.com/",
+                "name": "Тил Душі",
+                "alternateName": [
+                    "Благодійний фонд «Тил Душі»",
+                    "Tyl Dushi"
+                ],
+                "inLanguage": "uk",
+                "publisher": {
+                    "@id": "https://tyldushi.com/#organization"
+                }
+            },
+            {
+                "@type": "NGO",
+                "@id": "https://tyldushi.com/#organization",
+                "name": "Благодійний фонд «Тил Душі»",
+                "alternateName": [
+                    "Тил Душі",
+                    "Tyl Dushi"
+                ],
+                "legalName": "Благодійна організація «Благодійний фонд «Тил Душі»",
+                "url": "https://tyldushi.com/",
+                "logo": {
+                    "@type": "ImageObject",
+                    "url": "https://tyldushi.com/images/icon-square-512.png",
+                    "width": 512,
+                    "height": 512
+                },
+                "image": "https://tyldushi.com/images/og.jpg",
+                "description": "Одеський благодійний фонд психосоціальної підтримки ветеранів, ветеранок та їхніх родин. Усі послуги безкоштовні.",
+                "slogan": "Місце, де кожен знаходить опору",
+                "telephone": "+380965051991",
+                "taxID": "46068117",
+                "address": {
+                    "@type": "PostalAddress",
+                    "streetAddress": "Французький бульвар, 9",
+                    "addressLocality": "Одеса",
+                    "addressRegion": "Одеська область",
+                    "addressCountry": "UA"
+                },
+                "areaServed": {
+                    "@type": "City",
+                    "name": "Одеса"
+                },
+                "contactPoint": [
+                    {
+                        "@type": "ContactPoint",
+                        "telephone": "+380965051991",
+                        "contactType": "customer support",
+                        "areaServed": "UA",
+                        "availableLanguage": [
+                            "uk",
+                            "ru"
+                        ]
+                    }
+                ],
+                "knowsAbout": [
+                    "психологічна підтримка ветеранів",
+                    "реабілітація",
+                    "статус УБД",
+                    "соціальні виплати та пільги",
+                    "гранти для ветеранів"
+                ],
+                "hasOfferCatalog": {
+                    "@type": "OfferCatalog",
+                    "name": "Безкоштовні послуги для ветеранів та їхніх родин",
+                    "itemListElement": [
+                        {
+                            "@type": "Offer",
+                            "price": "0",
+                            "priceCurrency": "UAH",
+                            "itemOffered": {
+                                "@type": "Service",
+                                "name": "Психологічна реабілітація",
+                                "description": "Індивідуальні психологічні консультації, групи підтримки та заходи, спрямовані на емоційне відновлення й покращення психологічного добробуту.",
+                                "provider": {
+                                    "@id": "https://tyldushi.com/#organization"
+                                }
+                            }
+                        },
+                        {
+                            "@type": "Offer",
+                            "price": "0",
+                            "priceCurrency": "UAH",
+                            "itemOffered": {
+                                "@type": "Service",
+                                "name": "Перенаправлення до спеціалізованих послуг",
+                                "description": "Інформування та перенаправлення до профільних установ, соціальних служб, правової й психологічної допомоги відповідно до індивідуальних потреб.",
+                                "provider": {
+                                    "@id": "https://tyldushi.com/#organization"
+                                }
+                            }
+                        },
+                        {
+                            "@type": "Offer",
+                            "price": "0",
+                            "priceCurrency": "UAH",
+                            "itemOffered": {
+                                "@type": "Service",
+                                "name": "Консультації щодо оформлення документів",
+                                "description": "Інформаційна підтримка з питань оформлення документів, отримання статусів, пільг і соціальних виплат.",
+                                "provider": {
+                                    "@id": "https://tyldushi.com/#organization"
+                                }
+                            }
+                        },
+                        {
+                            "@type": "Offer",
+                            "price": "0",
+                            "priceCurrency": "UAH",
+                            "itemOffered": {
+                                "@type": "Service",
+                                "name": "Медичне перенаправлення та супровід",
+                                "description": "Сприяння в отриманні медичної допомоги, перенаправлення до закладів охорони здоров’я та супровід.",
+                                "provider": {
+                                    "@id": "https://tyldushi.com/#organization"
+                                }
+                            }
+                        },
+                        {
+                            "@type": "Offer",
+                            "price": "0",
+                            "priceCurrency": "UAH",
+                            "itemOffered": {
+                                "@type": "Service",
+                                "name": "Грантова підтримка та розвиток власної справи",
+                                "description": "Інформування про грантові програми, допомога з бізнес-планом і заявкою на фінансування для ветеранів і членів їхніх родин.",
+                                "provider": {
+                                    "@id": "https://tyldushi.com/#organization"
+                                }
+                            }
+                        }
+                    ]
+                },
+                "sameAs": [
+                    "https://www.instagram.com/tyl_dushi"
+                ]
+            }
+        ]
     }
     </script>
     <script>
