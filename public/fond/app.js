@@ -512,9 +512,220 @@
             </table></div>`;
     }
 
+    /* ---------- requests from the site ---------- */
+    const REQ_STATUS = { new: 'Нова', in_progress: 'В роботі', done: 'Завершено' };
+    const REQ_KIND = { help: 'Допомога', contact: 'Запитання', partner: 'Волонтерство / партнерство' };
+    const REQ_ROLE = { veteran: 'Ветеран / ветеранка', family: 'Член родини', other: 'Інше' };
+    const REQ_DIR = {
+        psychology: 'Психологічна реабілітація', referral: 'Перенаправлення до послуг', documents: 'Документи',
+        medical: 'Медичний супровід', grants: 'Гранти та власна справа', unsure: 'Потрібна консультація',
+    };
+    const reqState = { status: 'new' };
+
+    async function renderRequests() {
+        setActiveNav('requests');
+        const data = await api(`/requests?limit=200${reqState.status ? `&status=${reqState.status}` : ''}`);
+        const tabs = [['new', 'Нові'], ['in_progress', 'В роботі'], ['done', 'Завершені'], ['', 'Усі']];
+        view.innerHTML = `
+            <div class="page-head">
+                <div><h1>Заявки з сайту</h1><p>Нові заявки також приходять у Telegram-групу модераторів.</p></div>
+            </div>
+            <div class="toolbar">
+                ${tabs.map(([k, label]) => `<button class="btn btn--sm ${reqState.status === k ? 'btn--primary' : ''}" data-tab="${k}">${label}${k && data.counts[k] ? ` · ${data.counts[k]}` : ''}</button>`).join('')}
+            </div>
+            <div class="table-wrap"><table>
+                <thead><tr><th>Звернення</th><th class="hide-sm">Отримано</th><th>Статус</th><th></th></tr></thead>
+                <tbody id="reqRows">${data.items.length ? data.items.map(r => `
+                    <tr data-id="${r.id}">
+                        <td><div class="req">
+                            <div class="req__head"><b>${esc(r.name)}</b><span class="badge">${esc(REQ_KIND[r.kind] || r.kind)}</span></div>
+                            <div class="req__meta">
+                                ${r.phone ? `<a href="tel:${esc(r.phone.replace(/[^\d+]/g, ''))}">${esc(r.phone)}</a>` : ''}
+                                ${r.contact ? ` · ${esc(r.contact)}` : ''}
+                                ${r.role ? ` · ${esc(REQ_ROLE[r.role] || r.role)}` : ''}
+                                ${r.direction ? ` · ${esc(REQ_DIR[r.direction] || r.direction)}` : ''}
+                            </div>
+                            ${r.message ? `<div class="req__msg">${esc(r.message)}</div>` : ''}
+                        </div></td>
+                        <td class="hide-sm">${new Date(r.created_at).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}</td>
+                        <td><span class="badge badge--${r.status}">${REQ_STATUS[r.status]}</span>${r.handled_by ? `<div class="req__meta">${esc(r.handled_by)}</div>` : ''}</td>
+                        <td style="white-space:nowrap">
+                            ${r.status !== 'in_progress' ? `<button class="btn btn--sm" data-set="in_progress" title="В роботу"><i class="fas fa-play"></i></button>` : ''}
+                            ${r.status !== 'done' ? `<button class="btn btn--sm" data-set="done" title="Завершено"><i class="fas fa-check"></i></button>` : ''}
+                            <button class="btn btn--sm btn--danger" data-del title="Видалити"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>`).join('') : '<tr><td colspan="4" class="empty">Заявок немає</td></tr>'}</tbody>
+            </table></div>`;
+
+        view.querySelector('.toolbar').onclick = run(async e => {
+            const tab = e.target.closest('[data-tab]');
+            if (!tab) return;
+            reqState.status = tab.dataset.tab;
+            await renderRequests();
+        });
+        $('#reqRows').onclick = run(async e => {
+            const row = e.target.closest('tr[data-id]');
+            if (!row) return;
+            const id = row.dataset.id;
+            const set = e.target.closest('[data-set]');
+            if (set) {
+                await api(`/requests/${id}/status`, { method: 'POST', body: { status: set.dataset.set } });
+                toast('Статус оновлено');
+            } else if (e.target.closest('[data-del]')) {
+                if (!confirm('Видалити заявку?')) return;
+                await api(`/requests/${id}`, { method: 'DELETE' });
+                toast('Видалено');
+            } else return;
+            await refreshMeta();
+            await renderRequests();
+        });
+    }
+
+    /* ---------- events on the home page ---------- */
+    function eventForm(e = {}) {
+        return `
+            <form class="panel" id="eventForm" data-id="${e.id || ''}">
+                <h2><i class="fas fa-calendar-plus"></i>${e.id ? 'Редагувати подію' : 'Нова подія'}</h2>
+                <div class="grid2">
+                    <label class="field">Назва *<input name="title" value="${esc(e.title)}" required maxlength="200"></label>
+                    <label class="field">Дата<input type="date" name="event_date" value="${esc(e.event_date || '')}"></label>
+                </div>
+                <label class="field">Опис (1–3 речення)<textarea name="text" rows="3" maxlength="3000">${esc(e.text)}</textarea></label>
+                <div class="grid2">
+                    <label class="field">Посилання на пост в Instagram<input name="link" value="${esc(e.link)}" placeholder="https://www.instagram.com/p/..."></label>
+                    <div class="field">Фото
+                        <div class="case-img">
+                            ${e.image_url ? `<img src="${esc(e.image_url)}" alt="">` : ''}
+                            <input name="image_url" value="${esc(e.image_url)}" placeholder="URL або завантажте">
+                            ${meta.storageEnabled ? '<label class="btn btn--sm btn--icon" title="Завантажити"><i class="fas fa-upload"></i><input type="file" accept="image/*" id="eventUpload" hidden></label>' : ''}
+                        </div>
+                    </div>
+                </div>
+                <label class="field" style="display:flex;flex-direction:row;gap:.5rem;align-items:center;margin-top:.85rem">
+                    <input type="checkbox" name="published" ${e.published === false ? '' : 'checked'}> Показувати на сайті
+                </label>
+                <div style="display:flex;gap:.5rem;margin-top:1rem">
+                    <button class="btn btn--primary" type="submit"><i class="fas fa-floppy-disk"></i>Зберегти</button>
+                    ${e.id ? '<button class="btn" type="button" data-cancel>Скасувати</button>' : ''}
+                </div>
+            </form>`;
+    }
+
+    async function renderEvents(editId = null) {
+        setActiveNav('events');
+        const { events } = await api('/site');
+        const editing = editId ? events.find(e => e.id === editId) : null;
+        view.innerHTML = `
+            <div class="page-head">
+                <div><h1>Події на сайті</h1><p>Блок «Наші події» на головній. Перетягніть, щоб змінити порядок. Якщо подій немає, блок не показується.</p></div>
+            </div>
+            ${eventForm(editing || {})}
+            <div class="featured-list" id="eventList" style="margin-top:1rem">
+                ${events.length ? events.map(e => `
+                    <div class="featured-item event-item ${e.published ? '' : 'is-hidden'}" data-id="${e.id}">
+                        <span class="handle" title="Перетягнути"><i class="fas fa-grip-vertical"></i></span>
+                        ${e.image_url ? `<img src="${esc(e.image_url)}" alt="">` : '<span class="noimg"><i class="fas fa-image"></i></span>'}
+                        <div class="grow"><div class="org-name">${esc(e.title)}</div>
+                            <div class="org-sub">${e.event_date ? esc(new Date(`${e.event_date}T00:00:00`).toLocaleDateString('uk-UA')) : 'без дати'}${e.published ? '' : ' · приховано'}</div></div>
+                        <div class="actions" style="display:flex;gap:.35rem">
+                            <button class="btn btn--sm btn--icon" data-edit title="Редагувати"><i class="fas fa-pen"></i></button>
+                            <button class="btn btn--sm btn--icon btn--danger" data-del title="Видалити"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>`).join('') : '<div class="empty">Подій поки немає</div>'}
+            </div>`;
+
+        const form = $('#eventForm');
+        const upload = $('#eventUpload');
+        if (upload) upload.addEventListener('change', run(async () => {
+            if (!upload.files[0]) return;
+            const fd = new FormData();
+            fd.append('folder', 'events');
+            fd.append('file', upload.files[0]);
+            const { url } = await api('/upload', { method: 'POST', form: fd });
+            form.elements.image_url.value = url;
+            toast('Фото завантажено');
+        }));
+        form.querySelector('[data-cancel]')?.addEventListener('click', () => renderEvents());
+        form.addEventListener('submit', run(async e => {
+            e.preventDefault();
+            const f = form.elements;
+            const body = {
+                title: f.title.value, event_date: f.event_date.value, text: f.text.value,
+                link: f.link.value, image_url: f.image_url.value, published: f.published.checked,
+            };
+            if (form.dataset.id) await api(`/site/events/${form.dataset.id}`, { method: 'PUT', body });
+            else await api('/site/events', { method: 'POST', body });
+            toast('Збережено ✓');
+            await renderEvents();
+        }));
+
+        const list = $('#eventList');
+        if (window.Sortable && events.length) {
+            Sortable.create(list, {
+                handle: '.handle', animation: 200,
+                onEnd: run(async () => {
+                    await api('/site/events/order', { method: 'POST', body: { ids: $$('.event-item', list).map(el => Number(el.dataset.id)) } });
+                    toast('Порядок збережено');
+                }),
+            });
+        }
+        list.addEventListener('click', run(async e => {
+            const item = e.target.closest('.event-item');
+            if (!item) return;
+            if (e.target.closest('[data-edit]')) return renderEvents(Number(item.dataset.id));
+            if (e.target.closest('[data-del]')) {
+                if (!confirm('Видалити подію?')) return;
+                await api(`/site/events/${item.dataset.id}`, { method: 'DELETE' });
+                toast('Видалено');
+                await renderEvents();
+            }
+        }));
+    }
+
+    /* ---------- site settings ---------- */
+    const BANK_FIELDS = [
+        ['recipient', 'Отримувач'], ['edrpou', 'ЄДРПОУ'], ['iban', 'IBAN'], ['bank', 'Банк'], ['mfo', 'МФО'],
+        ['purpose', 'Призначення платежу'], ['currencies', 'Валюти рахунку'], ['swift_note', 'Примітка (напр. SWIFT для валюти)'],
+    ];
+
+    async function renderSettings() {
+        setActiveNav('settings');
+        const { settings } = await api('/site');
+        const bank = settings.bank_details || {};
+        view.innerHTML = `
+            <div class="page-head"><div><h1>Налаштування сайту</h1><p>Реквізити показуються у вікні «Підтримати фонд», години роботи — у блоці контактів.</p></div></div>
+            <form id="settingsForm">
+                <div class="panel">
+                    <h2><i class="fas fa-building-columns"></i>Реквізити для благодійних внесків</h2>
+                    <div class="settings-grid">
+                        ${BANK_FIELDS.map(([k, label]) => `<label class="field">${label}<input name="b_${k}" value="${esc(bank[k])}"></label>`).join('')}
+                    </div>
+                </div>
+                <div class="panel">
+                    <h2><i class="fas fa-clock"></i>Години роботи</h2>
+                    <label class="field">Наприклад: «Пн–Пт 10:00–18:00». Порожнє поле — блок не показується.
+                        <input name="work_hours" value="${esc(settings.work_hours || '')}">
+                    </label>
+                </div>
+                <div class="sticky-actions"><button class="btn btn--primary" type="submit"><i class="fas fa-floppy-disk"></i>Зберегти</button></div>
+            </form>`;
+        $('#settingsForm').addEventListener('submit', run(async e => {
+            e.preventDefault();
+            const f = e.target.elements;
+            await api('/site/settings', {
+                method: 'PUT',
+                body: {
+                    bank_details: Object.fromEntries(BANK_FIELDS.map(([k]) => [k, f[`b_${k}`].value])),
+                    work_hours: f.work_hours.value,
+                },
+            });
+            toast('Збережено ✓');
+        }));
+    }
+
     /* ---------- router ---------- */
     const router = run(async () => {
-        const hash = location.hash || '#/list/pending';
+        const hash = location.hash || '#/requests';
         let m;
         if ((m = hash.match(/^#\/list\/(\w+)/))) {
             listState.page = 1;
@@ -523,7 +734,10 @@
         else if (hash === '#/new') await renderEditor(null);
         else if (hash === '#/featured') await renderFeatured();
         else if (hash === '#/runs') await renderRuns();
-        else location.hash = '#/list/pending';
+        else if (hash === '#/requests') await renderRequests();
+        else if (hash === '#/events') await renderEvents();
+        else if (hash === '#/settings') await renderSettings();
+        else location.hash = '#/requests';
     });
 
     async function start() {

@@ -7,14 +7,15 @@
     <title>Адмінка — Тил Душі</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="/images/favicon.ico" sizes="any">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/fond/app.css">
 </head>
 <body>
     <div class="login" id="login" hidden>
         <form class="login__card" id="loginForm">
-            <img src="/images/logo.png" alt="" class="login__logo">
+            <img src="/images/phoenix-sm.webp" alt="" class="login__logo">
             <h1>Адмінка «Тил Душі»</h1>
             <p class="login__hint" id="loginHint"></p>
             <label>Логін<input name="login" autocomplete="username" required></label>
@@ -27,9 +28,13 @@
     <div class="app" id="app" hidden>
         <aside class="sidebar">
             <a class="sidebar__brand" href="/" target="_blank" rel="noopener">
-                <img src="/images/logo.png" alt=""><span>Тил Душі</span>
+                <img src="/images/phoenix-sm.webp" alt=""><span>Тил Душі</span>
             </a>
             <nav class="sidebar__nav" id="sidebarNav">
+                <a href="#/requests" data-route="requests"><i class="fas fa-bell"></i>Заявки з сайту<b data-count="requests_new"></b></a>
+                <a href="#/events" data-route="events"><i class="fas fa-calendar-days"></i>Події на сайті</a>
+                <a href="#/settings" data-route="settings"><i class="fas fa-sliders"></i>Налаштування сайту</a>
+                <hr>
                 <a href="#/list/pending" data-route="pending"><i class="fas fa-inbox"></i>На перевірці<b data-count="pending"></b></a>
                 <a href="#/list/approved" data-route="approved"><i class="fas fa-circle-check"></i>Опубліковані<b data-count="approved"></b></a>
                 <a href="#/featured" data-route="featured"><i class="fas fa-star"></i>Топ<b data-count="featured"></b></a>

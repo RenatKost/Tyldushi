@@ -9,10 +9,13 @@
     <meta property="og:title" content="{{TITLE}}">
     <meta property="og:description" content="{{DESCRIPTION}}">
     <meta property="og:url" content="{{CANONICAL}}">
-    <meta property="og:image" content="/images/logo.png">
+    <meta property="og:image" content="https://tyldushi.com/images/og.jpg">
+    <meta name="theme-color" content="#1c1424">
+    <link rel="icon" href="/images/favicon.ico" sizes="any">
+    <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@300..700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=Marck+Script&family=PT+Serif:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/motion.css">
@@ -20,25 +23,24 @@
 </head>
 <body class="page-orgs">
     <header class="header">
-        <nav class="nav">
-            <a class="nav-brand" href="/">
-                <img src="/images/logo.png" alt="Тил Душі" class="logo-image">
-                <span class="brand-text">Тил Душі</span>
+        <nav class="nav" aria-label="Головне меню">
+            <a class="nav-brand" href="/" aria-label="Тил Душі — на головну">
+                <img src="/images/phoenix-sm.webp" alt="" class="logo-image" width="44" height="49">
+                <span class="brand-text">Тил Душі<small>благодійний фонд</small></span>
             </a>
             <ul class="nav-menu">
-                <li><a href="/#home" class="nav-link"><i class="fas fa-home"></i><span>Головна</span></a></li>
-                <li><a href="/#reports" class="nav-link"><i class="fas fa-chart-bar"></i><span>Звіти</span></a></li>
-                <li><a href="/#fundraising" class="nav-link"><i class="fas fa-hand-holding-heart"></i><span>Збори</span></a></li>
-                <li><a href="/#projects" class="nav-link"><i class="fas fa-project-diagram"></i><span>Проекти</span></a></li>
+                <li><a href="/#about" class="nav-link"><i class="fas fa-feather"></i><span>Про фонд</span></a></li>
+                <li><a href="/#services" class="nav-link"><i class="fas fa-hand-holding-heart"></i><span>Напрями</span></a></li>
+                <li><a href="/#how" class="nav-link"><i class="fas fa-route"></i><span>Як отримати допомогу</span></a></li>
                 <li><a href="/organizations" class="nav-link active"><i class="fas fa-building-ngo"></i><span>Організації</span></a></li>
-                <li><a href="/#about" class="nav-link"><i class="fas fa-users"></i><span>Про Нас</span></a></li>
-                <li><a href="/#contacts" class="nav-link"><i class="fas fa-phone"></i><span>Контакти</span></a></li>
+                <li><a href="/#contacts" class="nav-link"><i class="fas fa-location-dot"></i><span>Контакти</span></a></li>
             </ul>
-            <div class="mobile-menu-toggle">
+            <a class="btn btn-gold btn-sm nav-cta" href="/#how">Отримати допомогу</a>
+            <button class="mobile-menu-toggle" type="button" aria-label="Меню">
                 <span></span>
                 <span></span>
                 <span></span>
-            </div>
+            </button>
         </nav>
     </header>
 
@@ -98,32 +100,18 @@
     </main>
 
     <footer class="footer">
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <div class="footer-brand">
-                        <img src="/images/logo.png" alt="Тил Душі" class="footer-logo">
-                        <span>Тил Душі</span>
-                    </div>
-                    <p>Відроджуємо надію разом</p>
-                </div>
-                <div class="footer-section">
-                    <h4>Швидкі посилання</h4>
-                    <ul>
-                        <li><a href="/#reports">Звіти</a></li>
-                        <li><a href="/#projects">Проекти</a></li>
-                        <li><a href="/organizations">Організації</a></li>
-                        <li><a href="/#contacts">Контакти</a></li>
-                    </ul>
-                </div>
-                <div class="footer-section">
-                    <h4>Ваша організація не в каталозі?</h4>
-                    <p>Напишіть нам на <a href="mailto:info@tildushi.org.ua">info@tildushi.org.ua</a> — додамо після перевірки.</p>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>&copy; 2026 Благодійний фонд "Тил Душі". Дані про організації — з відкритих джерел та Єдиного державного реєстру.</p>
-            </div>
+        <div class="container footer-inner">
+            <a class="footer-brand" href="/">
+                <img src="/images/phoenix-sm.webp" alt="" width="40" height="44">
+                <span>Тил Душі<small>благодійний фонд</small></span>
+            </a>
+            <nav class="footer-links" aria-label="Нижнє меню">
+                <a href="/#services">Напрями</a>
+                <a href="/#how">Як отримати допомогу</a>
+                <a href="/organizations">Організації</a>
+                <a href="/#contacts">Контакти</a>
+            </nav>
+            <p class="footer-copy">Ваша організація не в каталозі? Напишіть нам в <a href="https://www.instagram.com/tyl_dushi" target="_blank" rel="noopener">Instagram</a> або зателефонуйте <a href="tel:+380965051991">+380 96 505 19 91</a>. Дані про організації — з відкритих джерел та Єдиного державного реєстру.</p>
         </div>
     </footer>
 

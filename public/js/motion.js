@@ -66,7 +66,7 @@
         const hero = document.querySelector('.hero');
         if (!hero) return;
         const heading = hero.querySelector('h1');
-        const subtitle = hero.querySelector('.hero-subtitle');
+        const subtitle = hero.querySelectorAll('.eyebrow, .hero-subtitle, .hero-lead, .badge-free');
         const buttons = hero.querySelectorAll('.hero-buttons .btn');
         const image = hero.querySelector('.hero-image');
         const glow = hero.querySelector('.logo-glow');
@@ -91,7 +91,7 @@
 
         // Explicit end values: buttons have a CSS "transition: all", so a from() tween could read a
         // half-faded opacity as its end value and leave them invisible.
-        if (subtitle) tl.fromTo(subtitle, { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.9 }, '-=0.7');
+        if (subtitle.length) tl.fromTo(subtitle, { y: 24, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, stagger: 0.1 }, '-=0.8');
         if (buttons.length) {
             gsap.set(buttons, { transition: 'none' });
             tl.fromTo(buttons,
@@ -171,22 +171,47 @@
         });
     }
 
-    /* ---------- Section titles ---------- */
+    /* ---------- Section titles and gold dividers ---------- */
     function initSectionTitles() {
         if (!hasST) return;
         document.querySelectorAll('.section-title').forEach(title => {
-            gsap.set(title, { '--line-scale': 0 });
             const tl = gsap.timeline({
                 scrollTrigger: { trigger: title, start: 'top 85%', once: true },
             });
+            const eyebrow = title.previousElementSibling?.classList.contains('eyebrow') ? title.previousElementSibling : null;
+            if (eyebrow) tl.fromTo(eyebrow, { y: 14, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.6 });
             if (window.SplitText) {
                 const split = SplitText.create(title, { type: 'words', mask: 'words' });
-                tl.from(split.words, { yPercent: 100, duration: 0.9, stagger: 0.07 });
+                tl.from(split.words, { yPercent: 100, duration: 0.9, stagger: 0.07 }, eyebrow ? '-=0.35' : 0);
             } else {
                 tl.fromTo(title, { y: 30, autoAlpha: 0 }, { y: 0, autoAlpha: 1 });
             }
-            tl.to(title, { '--line-scale': 1, duration: 0.8, ease: 'expo.out' }, '-=0.5');
+            const divider = title.nextElementSibling?.classList.contains('divider') ? title.nextElementSibling : null;
+            if (divider) {
+                gsap.set(divider, { '--line-scale': 0 });
+                tl.to(divider, { '--line-scale': 1, duration: 0.9, ease: 'expo.out' }, '-=0.5');
+                tl.fromTo(divider.querySelector('span'), { rotate: -180, scale: 0 }, { rotate: 0, scale: 1, duration: 0.7, ease: 'back.out(2)' }, '<');
+            }
         });
+    }
+
+    /* ---------- Twinkling sparks in the hero ---------- */
+    function initSparks() {
+        const box = document.querySelector('.sparks');
+        if (!box) return;
+        const count = window.innerWidth < 700 ? 18 : 34;
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < count; i++) {
+            const s = document.createElement('span');
+            s.className = 'spark';
+            s.style.left = `${Math.random() * 100}%`;
+            s.style.top = `${Math.random() * 100}%`;
+            s.style.setProperty('--s', `${1.5 + Math.random() * 3}px`);
+            s.style.setProperty('--d', `${3 + Math.random() * 4}s`);
+            s.style.setProperty('--delay', `${Math.random() * 5}s`);
+            frag.appendChild(s);
+        }
+        box.appendChild(frag);
     }
 
     /* ---------- Cards ---------- */
@@ -255,7 +280,7 @@
     /* ---------- Magnetic buttons ---------- */
     function initMagnetic() {
         if (!isDesktop) return;
-        document.querySelectorAll('.hero-buttons .btn, .btn-primary, .btn-magnetic').forEach(btn => {
+        document.querySelectorAll('.hero-buttons .btn, .steps-cta .btn, .btn-magnetic').forEach(btn => {
             btn.classList.add('is-magnetic');
             const xTo = lazyQuickTo(btn, 'x', { duration: 0.4, ease: 'power3' });
             const yTo = lazyQuickTo(btn, 'y', { duration: 0.4, ease: 'power3' });
@@ -277,7 +302,7 @@
             gsap.fromTo(content,
                 { y: 60, scale: 0.92, autoAlpha: 0 },
                 { y: 0, scale: 1, autoAlpha: 1, duration: 0.55, ease: 'back.out(1.4)' });
-            const items = content.querySelectorAll('h2, h3, .form-group, .bank-details, .payment-btn, li');
+            const items = content.querySelectorAll('.eyebrow, h2, .modal-note, .form-group, .bank-row, .checkbox');
             gsap.fromTo(items, { y: 16, autoAlpha: 0 }, { y: 0, autoAlpha: 1, stagger: 0.025, duration: 0.4, delay: 0.15, clearProps: 'transform,opacity,visibility' });
         }
     }
@@ -305,7 +330,7 @@
             { scale: 1, rotate: 0, stagger: 0.06, duration: 0.6, delay: 0.25, ease: 'back.out(2)' });
     }
 
-    const CARD_SELECTOR = '.report-card, .fundraising-card, .project-card, .stat-item, .contact-item';
+    const CARD_SELECTOR = '.values li, .service-card, .step, .contact-list li, .catalog-teaser, .support';
 
     function init() {
         initChrome();
@@ -313,7 +338,8 @@
         initPageHero();
         initSectionTitles();
         revealCards(CARD_SELECTOR);
-        initTilt('.report-card, .project-card, .fundraising-card');
+        initSparks();
+        initTilt('.service-card');
         initCounters();
         initMagnetic();
         // Fonts and images change layout: recalculate trigger positions once everything is loaded.

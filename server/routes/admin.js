@@ -7,6 +7,10 @@ import {
     adminCounts, adminList, createOrg, deleteOrgs, getById, reorderFeatured,
     setFeatured, setStatus, STATUSES, updateOrg,
 } from '../lib/orgs.js';
+import {
+    createEvent, deleteEvent, deleteRequest, getSettings, listEvents, listRequests, reorderEvents,
+    requestCounts, saveSettings, setRequestStatus, updateEvent,
+} from '../lib/site.js';
 import { storageEnabled, uploadImage } from '../storage.js';
 
 const router = express.Router();
@@ -32,7 +36,8 @@ router.get('/meta', wrap(async (req, res) => {
     const { rows: runs } = await query(
         `SELECT job, started_at, finished_at, ok, stats, error FROM job_runs ORDER BY id DESC LIMIT 10`,
     );
-    res.json({ counts: await adminCounts(), categories: CATEGORIES, cities, statuses: STATUSES, storageEnabled, runs });
+    const counts = { ...(await adminCounts()), requests_new: (await requestCounts()).new };
+    res.json({ counts, categories: CATEGORIES, cities, statuses: STATUSES, storageEnabled, runs });
 }));
 
 router.get('/organizations', wrap(async (req, res) => {
@@ -83,9 +88,57 @@ router.post('/featured/order', express.json(), wrap(async (req, res) => {
     res.json({ ok: true });
 }));
 
+/* ---------- site requests ---------- */
+
+router.get('/requests', wrap(async (req, res) => {
+    const { status, page, limit } = req.query;
+    res.json({ ...(await listRequests({ status, page, limit })), counts: await requestCounts() });
+}));
+
+router.post('/requests/:id/status', express.json(), wrap(async (req, res) => {
+    const r = await setRequestStatus(Number(req.params.id), req.body?.status, 'адмінка');
+    if (!r) return res.status(404).json({ error: 'Не знайдено' });
+    res.json(r);
+}));
+
+router.delete('/requests/:id', wrap(async (req, res) => {
+    await deleteRequest(Number(req.params.id));
+    res.json({ ok: true });
+}));
+
+/* ---------- site content ---------- */
+
+router.get('/site', wrap(async (req, res) => {
+    res.json({ settings: await getSettings(), events: await listEvents() });
+}));
+
+router.put('/site/settings', express.json(), wrap(async (req, res) => {
+    res.json(await saveSettings(req.body || {}));
+}));
+
+router.post('/site/events', express.json(), wrap(async (req, res) => {
+    res.status(201).json(await createEvent(req.body || {}));
+}));
+
+router.put('/site/events/:id', express.json(), wrap(async (req, res) => {
+    const e = await updateEvent(Number(req.params.id), req.body || {});
+    if (!e) return res.status(404).json({ error: 'Не знайдено' });
+    res.json(e);
+}));
+
+router.delete('/site/events/:id', wrap(async (req, res) => {
+    await deleteEvent(Number(req.params.id));
+    res.json({ ok: true });
+}));
+
+router.post('/site/events/order', express.json(), wrap(async (req, res) => {
+    await reorderEvents(ids(req.body));
+    res.json({ ok: true });
+}));
+
 router.post('/upload', upload.single('file'), wrap(async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'Файл не отримано' });
-    const url = await uploadImage(req.file.buffer, req.file.mimetype, req.body?.folder === 'cases' ? 'cases' : 'logos');
+    const url = await uploadImage(req.file.buffer, req.file.mimetype, ['cases', 'events'].includes(req.body?.folder) ? req.body.folder : 'logos');
     res.json({ url });
 }));
 

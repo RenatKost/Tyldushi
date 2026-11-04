@@ -4,6 +4,7 @@ import { query } from './db.js';
 import { CATEGORIES } from './lib/categories.js';
 import { displayName } from './lib/display.js';
 import { CONTACT_KEYS, getById, setFeatured, setStatus, updateOrg } from './lib/orgs.js';
+import { getRequest, REQUEST_DIRECTIONS, REQUEST_KINDS, REQUEST_ROLES, setRequestStatus } from './lib/site.js';
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 const adminChats = String(process.env.TELEGRAM_ADMIN_CHAT_ID || '')
@@ -97,6 +98,46 @@ function categoriesKeyboard(org) {
 
 const sendOpts = kb => ({ parse_mode: 'HTML', reply_markup: kb, link_preview_options: { is_disabled: true } });
 
+/* ---------- requests from the site's forms ---------- */
+
+const REQUEST_STATUS_LABELS = { new: '🆕 Нова', in_progress: '🟡 В роботі', done: '✅ Завершено' };
+
+function renderRequest(r) {
+    const head = r.kind === 'help' ? '🆘 Нова заявка на допомогу' : r.kind === 'partner' ? '🤝 Волонтерство / партнерство' : '✉️ Нове звернення';
+    const date = new Date(r.created_at).toLocaleString('uk-UA', { timeZone: 'Europe/Kyiv', dateStyle: 'short', timeStyle: 'short' });
+    const lines = [
+        `<b>${head}</b>  #${r.id}`,
+        '',
+        `👤 <b>${esc(r.name)}</b>${r.role ? ` · ${esc(REQUEST_ROLES[r.role])}` : ''}`,
+    ];
+    if (r.phone) lines.push(`📞 <a href="tel:${esc(r.phone.replace(/[^\d+]/g, ''))}">${esc(r.phone)}</a>`);
+    if (r.contact) lines.push(`💬 ${esc(r.contact)}`);
+    if (r.direction) lines.push(`🧭 ${esc(REQUEST_DIRECTIONS[r.direction])}`);
+    if (r.message) lines.push('', esc(cut(r.message, 2500)));
+    lines.push('', `🕒 ${date} · ${REQUEST_STATUS_LABELS[r.status]}${r.handled_by ? ` · ${esc(r.handled_by)}` : ''}`);
+    return lines.join('\n');
+}
+
+function requestKeyboard(r) {
+    const kb = new InlineKeyboard();
+    if (r.status !== 'in_progress') kb.text('🟡 В роботу', `rq:${r.id}:in_progress`);
+    if (r.status !== 'done') kb.text('✅ Завершено', `rq:${r.id}:done`);
+    if (r.status === 'done') kb.text('↩️ Повернути', `rq:${r.id}:new`);
+    return kb;
+}
+
+/** Posts a new site request to the moderators' group. */
+export async function sendHelpRequest(r, api = token ? new Api(token) : null) {
+    if (!api || !adminChats.length) return false;
+    let messageId = null;
+    for (const chat of adminChats) {
+        const msg = await api.sendMessage(chat, renderRequest(r), sendOpts(requestKeyboard(r)));
+        messageId ??= msg.message_id;
+    }
+    await query('UPDATE help_requests SET tg_message_id = $2 WHERE id = $1', [r.id, messageId]);
+    return true;
+}
+
 /** Sends a moderation card to every admin chat. Used by the worker and by /next. */
 export async function sendModerationCard(orgId, api = token ? new Api(token) : null) {
     if (!api || !adminChats.length) return false;
@@ -183,6 +224,14 @@ function createBot() {
         });
         return org;
     }
+
+    bot.callbackQuery(/^rq:(\d+):(new|in_progress|done)$/, async ctx => {
+        const [id, status] = [Number(ctx.match[1]), ctx.match[2]];
+        if (!(await getRequest(id))) return ctx.answerCallbackQuery({ text: 'Заявку видалено' });
+        const r = await setRequestStatus(id, status, status === 'new' ? null : who(ctx).replace(/<[^>]+>/g, ''));
+        await ctx.editMessageText(renderRequest(r), sendOpts(requestKeyboard(r))).catch(() => {});
+        await ctx.answerCallbackQuery({ text: REQUEST_STATUS_LABELS[status] });
+    });
 
     bot.callbackQuery(/^a:(\d+)$/, async ctx => {
         await setStatus([Number(ctx.match[1])], 'approved');
