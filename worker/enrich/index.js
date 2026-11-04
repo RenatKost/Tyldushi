@@ -6,7 +6,8 @@ import { extractPage, fetchHtml, hostOf, readTelegramChannel } from './crawl.js'
 import { llmState, structureWithLlm, structureWithRules } from './llm.js';
 import { storeFirstLogo } from './logo.js';
 import { hostLooksLike, nameTokens, rankResults, searchName, verifySite } from './pick.js';
-import { search } from './search.js';
+import { refreshRating } from '../../server/lib/rating.js';
+import { search, SearchUnavailableError, usage as searchUsage } from './search.js';
 
 const MAX_SUBPAGES = 4;
 const MATERIALS_LIMIT = 30000;
@@ -15,16 +16,23 @@ function pageMaterial(page) {
     return `URL: ${page.url}\nЗАГОЛОВОК: ${page.title}\nОПИС: ${page.description}\nТЕКСТ:\n${page.text.slice(0, 3500)}`;
 }
 
+let emptySearch = false;
+const lastSearchWasEmpty = () => emptySearch;
+
 async function collect(org, log) {
+    // One search per organization fits the free Tavily plan (~30 organizations a day);
+    // a second, broader query runs only when the first finds nothing about the organization.
     const name = searchName(org);
-    const queries = [
-        `"${name}" ${org.edrpou || ''}`.trim(),
-        `"${name}" ${org.city || ''} ${org.org_type === 'charity_fund' ? 'благодійний фонд' : 'громадська організація'}`.replace(/\s+/g, ' '),
-        `"${name}" facebook OR instagram OR telegram`,
-    ];
-    const results = [];
-    for (const q of queries) results.push(...(await search(q)));
-    const ranked = rankResults(org, results);
+    const place = org.city || (org.region ? org.region.replace(' область', '') : '');
+    const kind = org.org_type === 'charity_fund' ? 'благодійний фонд' : 'громадська організація';
+    const results = await search(`"${name}" ${kind} ${place} ${org.edrpou || ''}`.replace(/\s+/g, ' ').trim());
+    emptySearch = results.length === 0;
+    let ranked = rankResults(org, results);
+    if (!ranked.websites.length && !Object.keys(ranked.socials).length) {
+        results.push(...(await search(`"${name}" ${place} facebook instagram telegram`.replace(/\s+/g, ' ').trim())));
+        ranked = rankResults(org, results);
+        emptySearch = results.length === 0;
+    }
     log(`  search: ${results.length} results, ${ranked.websites.length} site candidates, socials: ${Object.keys(ranked.socials).join(', ') || '—'}`);
 
     // Official website: first candidate whose homepage mentions the organization.
@@ -136,6 +144,7 @@ export async function enrichOne(org, log = console.log) {
         description: c.description,
         happened_at: /^\d{4}-\d{2}-\d{2}$/.test(c.date || '') ? c.date : null,
         source_url: urls.has(c.source_url) ? c.source_url : null,
+        kind: ['aid', 'event', 'project', 'report'].includes(c.kind) ? c.kind : 'aid',
     }));
 
     const sitePages = found.pages;
@@ -165,21 +174,34 @@ export async function enrichOne(org, log = console.log) {
 
     await updateOrg(org.id, patch);
 
+    // No manual moderation: anything with confirmed information is published right away.
     const confidence = Math.max(0, Math.min(1, Number(profile.confidence) || 0));
-    const status = confidence < 0.3 || !profile.description ? 'rejected_auto' : 'pending';
+    const status = confidence < 0.3 || !profile.description ? 'rejected_auto' : 'approved';
     await query(
         `UPDATE organizations SET status = $2, sources = $3, ai_confidence = $4, enriched_at = now(), logo_checked_at = now(),
-            enrich_error = $5, enrich_attempts = enrich_attempts + 1, updated_at = now()
+            enrich_error = $5, enrich_attempts = enrich_attempts + 1, updated_at = now(),
+            tg_posts_90d = $6, last_activity_at = greatest(last_activity_at, $7::date), tg_checked_at = now(),
+            has_reports = $8
          WHERE id = $1`,
         [org.id, status, JSON.stringify(sources), confidence,
-            status === 'rejected_auto' ? 'Низька впевненість у знайдених даних' : (usedLlm ? null : 'Зібрано без AI')],
+            status === 'rejected_auto' ? 'Низька впевненість у знайдених даних' : (usedLlm ? null : 'Зібрано без AI'),
+            telegramActivity(found.telegram).posts90, telegramActivity(found.telegram).last,
+            found.pages.some(p => /звіт|zvit|report/i.test(p.url) || (p.subpages || []).some(x => /звіт|zvit|report/i.test(`${x.url} ${x.text}`)))],
     );
+    await refreshRating(org.id);
     log(`  ✓ ${status} (confidence ${confidence.toFixed(2)}, ${cases.length} cases, ${usedLlm ? llmState.model : 'rules'})`);
     return status;
 }
 
+/** Posts in the last 90 days and the date of the latest post of a public Telegram channel. */
+export function telegramActivity(telegram) {
+    const dates = (telegram?.posts || []).map(p => p.date).filter(Boolean).sort();
+    const since = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10);
+    return { posts90: dates.filter(d => d >= since).length, last: dates[dates.length - 1] || null };
+}
+
 /** Picks the next organizations from the queue and enriches them one by one. */
-export async function enrichBatch({ limit, ids, log = console.log, onPending }) {
+export async function enrichBatch({ limit, ids, log = console.log }) {
     // Only one worker runs at a time (advisory lock), so rows left in "enriching" are from an
     // interrupted run and go back to the queue.
     await query(`UPDATE organizations SET status = 'registry' WHERE status = 'enriching'`);
@@ -192,22 +214,45 @@ export async function enrichBatch({ limit, ids, log = console.log, onPending }) 
              WHERE id IN (
                 SELECT id FROM organizations
                 WHERE status = 'registry' AND enrich_attempts < 3
-                ORDER BY priority DESC, registered_at DESC NULLS LAST
+                -- The focus region (Odesa first) is processed before the rest of Ukraine.
+                ORDER BY (city = $2) DESC NULLS LAST, (region = $3) DESC NULLS LAST,
+                         priority DESC, registered_at DESC NULLS LAST
                 LIMIT $1 FOR UPDATE SKIP LOCKED)
              RETURNING *`,
-            [limit],
+            [limit, process.env.FOCUS_CITY || 'Одеса', process.env.FOCUS_REGION || 'Одеська область'],
         );
 
-    const stats = { processed: 0, pending: 0, rejected_auto: 0, errors: 0 };
-    for (const org of rows) {
+    const stats = { processed: 0, approved: 0, rejected_auto: 0, errors: 0, requeued: 0 };
+    const requeue = async list => {
+        if (!list.length) return;
+        await query(`UPDATE organizations SET status = 'registry' WHERE id = ANY($1::int[])`, [list.map(o => o.id)]);
+        stats.requeued += list.length;
+    };
+
+    let emptyStreak = [];
+    for (const [i, org] of rows.entries()) {
         try {
             const status = await enrichOne(org, log);
             stats.processed++;
             stats[status] = (stats[status] || 0) + 1;
-            if (status === 'pending' && onPending) {
-                await onPending(org.id).catch(err => log(`  ! telegram: ${err.message}`));
+            // Five organizations in a row without a single search result means search is broken, not
+            // that the organizations do not exist: undo those rejections and stop.
+            emptyStreak = lastSearchWasEmpty() ? [...emptyStreak, org] : [];
+            if (emptyStreak.length >= 5) {
+                log('  ! search returns nothing — stopping, organizations go back to the queue');
+                await requeue(emptyStreak);
+                stats.rejected_auto -= emptyStreak.length;
+                await requeue(rows.slice(i + 1));
+                stats.search_broken = true;
+                break;
             }
         } catch (err) {
+            if (err instanceof SearchUnavailableError) {
+                log(`  ! search unavailable (${err.message}) — stopping, organizations go back to the queue`);
+                await requeue(rows.slice(i));
+                stats.search_error = err.message;
+                break;
+            }
             stats.errors++;
             log(`  ! error: ${err.message}`);
             await query(
@@ -217,6 +262,7 @@ export async function enrichBatch({ limit, ids, log = console.log, onPending }) 
             );
         }
     }
+    stats.search_requests = searchUsage.tavily;
     stats.llm_calls = llmState.calls;
     stats.llm_model = llmState.model;
     stats.llm_quota_exhausted = llmState.quotaExhausted;

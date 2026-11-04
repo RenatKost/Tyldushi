@@ -1,4 +1,4 @@
-/* Organizations catalog: filters, list, detail view with client-side routing. */
+/* Organizations catalog: free-text need search, filters, activity index, detail view, reviews. */
 (function () {
     const API = '/api';
     const hasGsap = typeof window.gsap !== 'undefined' && window.Motion && window.Motion.enabled;
@@ -12,6 +12,7 @@
         form: document.getElementById('orgFilters'),
         q: document.querySelector('#orgFilters input[name="q"]'),
         city: document.querySelector('#orgFilters select[name="city"]'),
+        region: document.querySelector('#orgFilters select[name="region"]'),
         types: document.querySelectorAll('.orgs-type button'),
         chips: document.getElementById('orgCategories'),
         grid: document.getElementById('orgGrid'),
@@ -19,9 +20,15 @@
         empty: document.getElementById('orgEmpty'),
         more: document.getElementById('orgMore'),
         loader: document.getElementById('orgLoader'),
+        needForm: document.getElementById('needForm'),
+        needExamples: document.getElementById('needExamples'),
+        needResult: document.getElementById('needResult'),
+        needQuery: document.getElementById('needQuery'),
+        needTags: document.getElementById('needTags'),
+        needReset: document.getElementById('needReset'),
     };
 
-    const state = { q: '', city: '', category: '', type: '', page: 1 };
+    const state = { q: '', city: '', region: '', category: '', type: '', need: '', page: 1 };
     let categories = [];
     let total = 0;
     let requestId = 0;
@@ -53,6 +60,15 @@
         animals: '#c9952b', education: '#3f51b5', legal: '#546e7a', housing: '#b0603a', community: '#8e44ad', ecology: '#3c9a3c',
     };
     const DEFAULT_ACCENT = '#4a3c7c';
+
+    const LEVELS = {
+        high: { label: 'Висока активність', icon: 'fa-fire-flame-curved' },
+        active: { label: 'Активна', icon: 'fa-circle-check' },
+        low: { label: 'Мало підтверджень', icon: 'fa-circle-half-stroke' },
+        none: { label: 'Немає підтверджень активності', icon: 'fa-circle-question' },
+    };
+
+    const CASE_KINDS = { aid: 'Допомога', event: 'Захід', project: 'Проєкт', report: 'Звіт', post: 'Публікація' };
 
     const LEGAL_PREFIX = /^(міжнародн\S*\s+|всеукраїнськ\S*\s+)?(благодійн\S*\s+(організаці\S*|фонд\S*)|громадськ\S*\s+(організаці\S*|спілк\S*|об.єднанн\S*)|бо|бф|го|мбф)\s+/i;
 
@@ -95,6 +111,39 @@
         return src ? `<span class="${cls}"><img src="${esc(src)}" alt="" loading="lazy" onerror="this.parentNode.remove()"></span>` : '';
     }
 
+    function relativeDate(d) {
+        if (!d) return '';
+        const days = Math.round((Date.now() - new Date(`${d}T00:00:00`).getTime()) / 864e5);
+        if (days < 1) return 'сьогодні';
+        if (days < 7) return `${days} ${plural(days, 'день', 'дні', 'днів')} тому`;
+        if (days < 31) {
+            const w = Math.round(days / 7);
+            return `${w} ${plural(w, 'тиждень', 'тижні', 'тижнів')} тому`;
+        }
+        if (days < 365) {
+            const m = Math.round(days / 30);
+            return `${m} ${plural(m, 'місяць', 'місяці', 'місяців')} тому`;
+        }
+        const y = Math.round(days / 365);
+        return `${y} ${plural(y, 'рік', 'роки', 'років')} тому`;
+    }
+
+    function stars(value, max = 5) {
+        const v = Math.round(Number(value) || 0);
+        return Array.from({ length: max }, (_, i) => `<i class="fa${i < v ? 's' : 'r'} fa-star"></i>`).join('');
+    }
+
+    function activityHtml(org, compact = true) {
+        const level = LEVELS[org.activity_level] || LEVELS.none;
+        const score = Number(org.activity_score) || 0;
+        return `
+            <div class="org-activity org-activity--${esc(org.activity_level || 'none')}" title="Індекс активності ${score}/100">
+                <span class="org-activity__badge"><i class="fas ${level.icon}"></i>${level.label}</span>
+                <span class="org-activity__bar" aria-hidden="true"><span style="width:${Math.max(4, score)}%"></span></span>
+                ${compact ? '' : `<span class="org-activity__score">${score}<small>/100</small></span>`}
+            </div>`;
+    }
+
     const CONTACT_ICONS = [
         ['website', 'fas fa-globe', 'Сайт'], ['telegram', 'fab fa-telegram', 'Telegram'], ['facebook', 'fab fa-facebook-f', 'Facebook'],
         ['instagram', 'fab fa-instagram', 'Instagram'], ['youtube', 'fab fa-youtube', 'YouTube'], ['phone', 'fas fa-phone', 'Телефон'],
@@ -102,6 +151,7 @@
 
     const typeLabel = t => (t === 'charity_fund' ? 'Благодійний фонд' : 'Громадська організація');
     const category = key => categories.find(c => c.key === key);
+    const placeOf = org => org.city || org.region || '';
 
     async function getJSON(url) {
         const res = await fetch(url, { headers: { Accept: 'application/json' } });
@@ -110,14 +160,16 @@
     }
 
     /* ---------- URL state ---------- */
+    const QUERY_KEYS = ['q', 'city', 'region', 'category', 'type', 'need'];
+
     function readQuery() {
         const p = new URLSearchParams(location.search);
-        for (const key of ['q', 'city', 'category', 'type']) state[key] = p.get(key) || '';
+        for (const key of QUERY_KEYS) state[key] = p.get(key) || '';
     }
 
     function writeQuery() {
         const p = new URLSearchParams();
-        for (const key of ['q', 'city', 'category', 'type']) if (state[key]) p.set(key, state[key]);
+        for (const key of QUERY_KEYS) if (state[key]) p.set(key, state[key]);
         const qs = p.toString();
         history.replaceState(history.state, '', `/organizations${qs ? `?${qs}` : ''}`);
     }
@@ -125,6 +177,8 @@
     function syncControls() {
         els.q.value = state.q;
         els.city.value = state.city;
+        els.region.value = state.region;
+        els.needForm.elements.need.value = state.need;
         els.types.forEach(b => b.classList.toggle('is-active', b.dataset.type === state.type));
         els.chips.querySelectorAll('.orgs-chip').forEach(c => c.classList.toggle('is-active', c.dataset.key === state.category));
     }
@@ -136,12 +190,16 @@
         const accent = ACCENTS[primary?.key] || DEFAULT_ACCENT;
         const title = displayName(org);
         const excerpt = cleanExcerpt(org.excerpt, title);
-        const tags = cats.slice(0, 3).map((c, i) =>
-            `<span class="org-tag${i === 0 ? ' is-primary' : ''}" style="--tag:${ACCENTS[c.key] || DEFAULT_ACCENT}"><i class="fas ${esc(c.icon)}"></i>${esc(c.label)}</span>`).join('');
+        const matched = new Set(org.matched || []);
+        const ordered = matched.size ? [...cats.filter(c => matched.has(c.key)), ...cats.filter(c => !matched.has(c.key))] : cats;
+        const tags = ordered.slice(0, 3).map((c, i) =>
+            `<span class="org-tag${i === 0 ? ' is-primary' : ''}${matched.has(c.key) ? ' is-match' : ''}" style="--tag:${ACCENTS[c.key] || DEFAULT_ACCENT}"><i class="fas ${esc(c.icon)}"></i>${esc(c.label)}</span>`).join('');
         const more = cats.length > 3 ? `<span class="org-tag is-more">+${cats.length - 3}</span>` : '';
         const links = CONTACT_ICONS.filter(([k]) => org.contacts && org.contacts[k])
             .map(([, icon, label]) => `<span class="org-card__link" title="${label}"><i class="${icon}"></i></span>`).join('');
-        const cases = org.cases_count ? `<span class="org-card__cases"><i class="fas fa-award"></i>${org.cases_count} ${plural(org.cases_count, 'кейс', 'кейси', 'кейсів')}</span>` : '';
+        const cases = org.cases_count ? `<span class="org-card__cases"><i class="fas fa-award"></i>${org.cases_count} ${plural(org.cases_count, 'справа', 'справи', 'справ')}</span>` : '';
+        const why = matched.size
+            ? `<p class="org-card__why"><i class="fas fa-check"></i>Підходить: ${[...matched].map(k => esc(category(k)?.label || k)).join(', ')}</p>` : '';
 
         return `
             <a class="org-card${org.is_featured ? ' is-featured' : ''}${org.logo_url ? ' has-logo' : ''}" href="/organizations/${encodeURIComponent(org.slug)}"
@@ -150,17 +208,22 @@
                     <div class="org-card__heading">
                         <span class="org-card__type">
                             ${org.is_featured ? '<i class="fas fa-star"></i>Рекомендуємо · ' : ''}${typeLabel(org.org_type)}
+                            ${org.verified_by_fund ? '<span class="org-verified" title="Перевірено фондом «Тил Душі»"><i class="fas fa-shield-heart"></i></span>' : ''}
                         </span>
                         <h3 class="org-card__title">${esc(title)}</h3>
-                        ${org.city ? `<span class="org-card__city"><i class="fas fa-location-dot"></i>${esc(org.city)}</span>` : ''}
+                        ${placeOf(org) ? `<span class="org-card__city"><i class="fas fa-location-dot"></i>${esc(placeOf(org))}</span>` : ''}
                     </div>
                     ${logoHtml(org, 'org-card__logo')}
                 </div>
+                ${activityHtml(org)}
+                ${why}
                 ${excerpt ? `<p class="org-card__excerpt">${esc(excerpt)}</p>` : ''}
                 ${tags ? `<div class="org-tags">${tags}${more}</div>` : ''}
                 <div class="org-card__foot">
                     <div class="org-card__links">${links}</div>
+                    ${org.review_count ? `<span class="org-card__cases"><i class="fas fa-star"></i>${Number(org.review_avg || 0).toFixed(1)}</span>` : ''}
                     ${cases}
+                    ${org.last_activity_at ? `<span class="org-card__cases" title="Остання активність"><i class="fas fa-bolt"></i>${esc(relativeDate(org.last_activity_at))}</span>` : ''}
                     <span class="org-card__go" aria-hidden="true"><i class="fas fa-arrow-right"></i></span>
                 </div>
             </a>`;
@@ -189,10 +252,12 @@
     }
 
     async function loadList({ append = false } = {}) {
+        if (state.need) return loadNeed();
         const id = ++requestId;
         if (!append) state.page = 1;
+        els.needResult.hidden = true;
         const p = new URLSearchParams({ page: state.page, limit: 24 });
-        for (const key of ['q', 'city', 'category', 'type']) if (state[key]) p.set(key, state[key]);
+        for (const key of ['q', 'city', 'region', 'category', 'type']) if (state[key]) p.set(key, state[key]);
 
         els.loader.hidden = false;
         els.more.hidden = true;
@@ -203,16 +268,55 @@
             renderList(data.items, append);
             const shown = els.grid.querySelectorAll('.org-card').length;
             els.count.textContent = total
-                ? `Знайдено ${total} ${plural(total, 'організацію', 'організації', 'організацій')}`
+                ? `Знайдено ${total} ${plural(total, 'організацію', 'організації', 'організацій')} · спершу найактивніші`
                 : '';
             els.empty.hidden = total > 0;
             els.more.hidden = shown >= total;
-        } catch (err) {
+        } catch {
             if (id !== requestId) return;
             els.count.textContent = 'Не вдалося завантажити каталог. Спробуйте оновити сторінку.';
         } finally {
             if (id === requestId) els.loader.hidden = true;
         }
+    }
+
+    /* ---------- "Пошук по запиту" ---------- */
+    async function loadNeed() {
+        const id = ++requestId;
+        els.loader.hidden = false;
+        els.more.hidden = true;
+        els.needResult.hidden = false;
+        els.needQuery.textContent = state.need;
+        els.needTags.innerHTML = '';
+        const p = new URLSearchParams({ q: state.need });
+        if (state.city) p.set('city', state.city);
+        try {
+            const data = await getJSON(`${API}/organizations/match?${p}`);
+            if (id !== requestId) return;
+            els.needTags.innerHTML = data.categories.length
+                ? `<span>Шукаємо за:</span>${data.categories.map(k => {
+                    const c = category(k);
+                    return c ? `<span class="org-tag is-primary" style="--tag:${ACCENTS[k] || DEFAULT_ACCENT}"><i class="fas ${esc(c.icon)}"></i>${esc(c.label)}</span>` : '';
+                }).join('')}`
+                : '<span>Шукаємо за ключовими словами з вашого запиту</span>';
+            renderList(data.items, false);
+            els.count.textContent = data.items.length
+                ? `Підходять ${data.items.length} ${plural(data.items.length, 'організація', 'організації', 'організацій')}`
+                : '';
+            els.empty.hidden = data.items.length > 0;
+        } catch {
+            if (id !== requestId) return;
+            els.count.textContent = 'Не вдалося виконати пошук. Спробуйте ще раз.';
+        } finally {
+            if (id === requestId) els.loader.hidden = true;
+        }
+    }
+
+    function runNeed(text) {
+        state.need = String(text || '').trim().slice(0, 300);
+        writeQuery();
+        loadList();
+        els.catalog.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
     function renderChips() {
@@ -223,18 +327,22 @@
     }
 
     async function loadMeta() {
-        const [cats, cities, all] = await Promise.all([
+        const [cats, cities, regions, stats] = await Promise.all([
             getJSON(`${API}/categories`).catch(() => []),
             getJSON(`${API}/cities`).catch(() => []),
-            getJSON(`${API}/organizations?limit=1`).catch(() => ({ total: 0 })),
+            getJSON(`${API}/regions`).catch(() => []),
+            getJSON(`${API}/catalog-stats`).catch(() => ({})),
         ]);
         categories = cats;
         renderChips();
         els.city.insertAdjacentHTML('beforeend', cities
             .map(c => `<option value="${esc(c.city)}">${esc(c.city)} (${c.count})</option>`).join(''));
+        els.region.insertAdjacentHTML('beforeend', regions
+            .map(r => `<option value="${esc(r.region)}">${esc(r.region)} (${r.count})</option>`).join(''));
 
-        animateStat('total', all.total);
-        animateStat('cities', cities.length);
+        animateStat('total', stats.total || 0);
+        animateStat('cities', stats.cities || cities.length);
+        animateStat('active', stats.active || 0);
     }
 
     function animateStat(name, value) {
@@ -278,23 +386,137 @@
         return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('uk-UA', { year: 'numeric', month: 'long', day: 'numeric' });
     }
 
+    function ratingPanel(org) {
+        const details = Array.isArray(org.activity_details) ? org.activity_details : [];
+        return `
+            <div class="org-panel org-rating" data-anim>
+                <h2><i class="fas fa-chart-simple"></i>Індекс активності</h2>
+                ${activityHtml(org, false)}
+                ${org.last_activity_at ? `<p class="org-rating__last"><i class="fas fa-bolt"></i>Остання підтверджена активність: ${esc(relativeDate(org.last_activity_at))}</p>` : ''}
+                ${details.length ? `
+                <details class="org-rating__why">
+                    <summary>Чому такий рейтинг</summary>
+                    <ul>${details.map(d => `
+                        <li class="${d.ok ? 'is-ok' : ''}"><i class="fas ${d.ok ? 'fa-circle-check' : 'fa-circle'}"></i>
+                            <span>${esc(d.label)}</span><b>${d.points}/${d.max}</b></li>`).join('')}
+                    </ul>
+                    <p class="org-rating__note">Індекс рахується автоматично з відкритих джерел: сайт, соцмережі, Telegram-канал, підтверджені справи з датами та відгуки людей.</p>
+                </details>` : ''}
+            </div>`;
+    }
+
+    function timelineHtml(org) {
+        const items = (org.cases || []).slice().sort((a, b) => String(b.happened_at || '').localeCompare(String(a.happened_at || '')));
+        if (!items.length) return '';
+        return `
+            <div class="org-panel" data-anim>
+                <h2><i class="fas fa-timeline"></i>Активність і реалізовані справи</h2>
+                <ol class="org-timeline">${items.map(c => {
+                    const img = c.image_url && (c.image_url.startsWith('/media/') ? c.image_url : safeUrl(c.image_url));
+                    const src = c.source_url && safeUrl(c.source_url);
+                    return `
+                    <li class="org-timeline__item">
+                        <span class="org-timeline__dot" aria-hidden="true"></span>
+                        <div class="org-case${img ? '' : ' no-image'}">
+                            ${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : ''}
+                            <div>
+                                <div class="org-timeline__meta">
+                                    <span class="org-kind">${esc(CASE_KINDS[c.kind] || 'Допомога')}</span>
+                                    ${c.happened_at ? `<time datetime="${esc(c.happened_at)}">${esc(formatDate(c.happened_at))}</time>` : '<span class="muted">дата не вказана</span>'}
+                                </div>
+                                <h3>${esc(c.title)}</h3>
+                                ${c.description ? `<p>${esc(c.description)}</p>` : ''}
+                                ${src ? `<a href="${esc(src)}" target="_blank" rel="noopener nofollow">Джерело <i class="fas fa-arrow-up-right-from-square"></i></a>` : ''}
+                            </div>
+                        </div>
+                    </li>`;
+                }).join('')}</ol>
+            </div>`;
+    }
+
+    function reviewsPanel(org) {
+        return `
+            <div class="org-panel org-reviews" data-anim id="reviews">
+                <h2><i class="fas fa-comments"></i>Відгуки
+                    ${org.review_count ? `<span class="org-reviews__avg">${stars(org.review_avg)} ${Number(org.review_avg).toFixed(1)} · ${org.review_count}</span>` : ''}
+                </h2>
+                <div class="org-reviews__list" id="reviewList"><p class="muted">Завантаження…</p></div>
+                <form class="review-form" id="reviewForm" novalidate>
+                    <h3>Залишити відгук</h3>
+                    <p class="muted">Розкажіть, чи допомогла вам організація. Відгук з’явиться одразу.</p>
+                    <label class="hp" aria-hidden="true">Сайт<input name="website" tabindex="-1" autocomplete="off"></label>
+                    <div class="review-form__row">
+                        <label class="form-group">Ваше ім’я *<input name="name" maxlength="60" required></label>
+                        <fieldset class="review-stars" aria-label="Оцінка">
+                            ${[5, 4, 3, 2, 1].map(n => `<input type="radio" name="rating" id="rs${n}" value="${n}"><label for="rs${n}" title="${n}"><i class="fas fa-star"></i></label>`).join('')}
+                        </fieldset>
+                    </div>
+                    <label class="form-group">Відгук *<textarea name="text" rows="4" maxlength="2000" required placeholder="Що саме зробила організація, як швидко відповіли…"></textarea></label>
+                    <label class="checkbox"><input type="checkbox" name="consent"> Відгук правдивий, без образ і реклами; посилання не допускаються</label>
+                    <p class="form-error" role="alert"></p>
+                    <button class="btn btn-gold" type="submit"><i class="fas fa-paper-plane"></i> Опублікувати</button>
+                </form>
+            </div>`;
+    }
+
+    function reviewItem(r) {
+        const date = new Date(r.created_at).toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
+        return `
+            <article class="review">
+                <div class="review__head"><b>${esc(r.author_name)}</b>${r.rating ? `<span class="review__stars">${stars(r.rating)}</span>` : ''}<time>${esc(date)}</time></div>
+                <p>${esc(r.text)}</p>
+            </article>`;
+    }
+
+    async function loadReviews(slug) {
+        const list = document.getElementById('reviewList');
+        if (!list) return;
+        try {
+            const reviews = await getJSON(`${API}/organizations/${encodeURIComponent(slug)}/reviews`);
+            list.innerHTML = reviews.length ? reviews.map(reviewItem).join('') : '<p class="muted">Поки немає відгуків. Будьте першими.</p>';
+        } catch {
+            list.innerHTML = '<p class="muted">Не вдалося завантажити відгуки.</p>';
+        }
+    }
+
+    function bindReviewForm(slug) {
+        const form = document.getElementById('reviewForm');
+        if (!form) return;
+        const error = form.querySelector('.form-error');
+        form.addEventListener('submit', async e => {
+            e.preventDefault();
+            error.textContent = '';
+            const f = form.elements;
+            const body = {
+                name: f.name.value, text: f.text.value, rating: form.querySelector('input[name="rating"]:checked')?.value || null,
+                consent: f.consent.checked, website: f.website.value,
+            };
+            const button = form.querySelector('button[type="submit"]');
+            button.disabled = true;
+            try {
+                const res = await fetch(`${API}/organizations/${encodeURIComponent(slug)}/reviews`, {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(data.error || 'Не вдалося опублікувати відгук');
+                form.reset();
+                const list = document.getElementById('reviewList');
+                if (list.querySelector('.muted')) list.innerHTML = '';
+                list.insertAdjacentHTML('afterbegin', reviewItem(data));
+                if (hasGsap) gsap.fromTo(list.firstElementChild, { autoAlpha: 0, y: -10 }, { autoAlpha: 1, y: 0, duration: 0.5 });
+                error.textContent = '';
+                form.querySelector('h3').textContent = 'Дякуємо за відгук!';
+            } catch (err) {
+                error.textContent = err.message;
+            } finally {
+                button.disabled = false;
+            }
+        });
+    }
+
     function detailHtml(org) {
         const help = (org.help_categories || []).map(category).filter(Boolean)
             .map(c => `<div class="org-help-item"><i class="fas ${esc(c.icon)}"></i><span>${esc(c.label)}</span></div>`).join('');
-        const cases = (org.cases || []).map(c => {
-            const img = c.image_url && (c.image_url.startsWith('/media/') ? c.image_url : safeUrl(c.image_url));
-            const src = c.source_url && safeUrl(c.source_url);
-            return `
-                <article class="org-case${img ? '' : ' no-image'}">
-                    ${img ? `<img src="${esc(img)}" alt="" loading="lazy">` : ''}
-                    <div>
-                        <h3>${esc(c.title)}</h3>
-                        ${c.happened_at ? `<time datetime="${esc(c.happened_at)}">${esc(formatDate(c.happened_at))}</time>` : ''}
-                        ${c.description ? `<p>${esc(c.description)}</p>` : ''}
-                        ${src ? `<a href="${esc(src)}" target="_blank" rel="noopener nofollow">Джерело <i class="fas fa-arrow-up-right-from-square"></i></a>` : ''}
-                    </div>
-                </article>`;
-        }).join('');
         const contacts = contactsHtml(org.contacts);
         const sources = (org.sources || []).map(s => safeUrl(typeof s === 'string' ? s : s.url)).filter(Boolean)
             .map(u => `<li><a href="${esc(u)}" target="_blank" rel="noopener nofollow">${esc(u.replace(/^https?:\/\/(www\.)?/, ''))}</a></li>`).join('');
@@ -311,21 +533,25 @@
                                     <span class="org-card__type">${org.is_featured ? '<i class="fas fa-star"></i>Рекомендуємо · ' : ''}${typeLabel(org.org_type)}</span>
                                     <h1>${esc(displayName(org))}</h1>
                                     <p class="org-detail__legal">${esc(org.name)}</p>
-                                    ${org.city ? `<span class="org-card__city"><i class="fas fa-location-dot"></i>${esc(org.city)}</span>` : ''}
+                                    ${placeOf(org) ? `<span class="org-card__city"><i class="fas fa-location-dot"></i>${esc(placeOf(org))}</span>` : ''}
+                                    ${org.verified_by_fund ? '<span class="org-verified-badge"><i class="fas fa-shield-heart"></i>Перевірено фондом «Тил Душі»</span>' : ''}
                                 </div>
                             </div>
                             <h2><i class="fas fa-circle-info"></i>Про організацію</h2>
                             <p class="org-description">${esc(org.description || 'Опис готується.')}</p>
                         </div>
                         ${help ? `<div class="org-panel" data-anim><h2><i class="fas fa-hand-holding-heart"></i>Чим допомагають</h2><div class="org-help-grid">${help}</div></div>` : ''}
-                        ${cases ? `<div class="org-panel" data-anim><h2><i class="fas fa-award"></i>Реалізовані кейси</h2><div class="org-cases">${cases}</div></div>` : ''}
+                        ${timelineHtml(org)}
+                        ${reviewsPanel(org)}
                     </div>
                     <aside class="org-detail__aside">
+                        ${ratingPanel(org)}
                         ${contacts ? `<div class="org-panel" data-anim><h2><i class="fas fa-address-book"></i>Контакти</h2><div class="org-contacts">${contacts}</div></div>` : ''}
                         <div class="org-panel" data-anim>
                             <h2><i class="fas fa-file-shield"></i>Дані з реєстру</h2>
                             <dl class="org-facts">
                                 ${org.edrpou ? `<div><dt>ЄДРПОУ</dt><dd>${esc(org.edrpou)}</dd></div>` : ''}
+                                ${org.region ? `<div><dt>Область</dt><dd>${esc(org.region)}</dd></div>` : ''}
                                 ${org.address ? `<div><dt>Адреса</dt><dd>${esc(org.address)}</dd></div>` : ''}
                                 ${org.registered_at ? `<div><dt>Дата реєстрації</dt><dd>${esc(formatDate(org.registered_at))}</dd></div>` : ''}
                             </dl>
@@ -355,9 +581,13 @@
             const primary = (org.help_categories || [])[0];
             els.detail.style.setProperty('--accent', ACCENTS[primary] || DEFAULT_ACCENT);
             document.title = `${displayName(org)}${org.city ? ` — ${org.city}` : ''} | Тил Душі`;
+            loadReviews(slug);
+            bindReviewForm(slug);
             if (hasGsap) {
                 gsap.fromTo(els.detail.querySelectorAll('[data-anim]'), { y: 40, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.8, stagger: 0.1, ease: 'power3.out', clearProps: 'transform' });
-                gsap.fromTo(els.detail.querySelectorAll('.org-help-item, .org-case, .org-contact'), { y: 16, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.04, delay: 0.3, clearProps: 'transform,opacity,visibility' });
+                gsap.fromTo(els.detail.querySelectorAll('.org-help-item, .org-timeline__item, .org-contact'), { y: 16, autoAlpha: 0 }, { y: 0, autoAlpha: 1, duration: 0.5, stagger: 0.04, delay: 0.3, clearProps: 'transform,opacity,visibility' });
+                const bar = els.detail.querySelector('.org-rating .org-activity__bar span');
+                if (bar) gsap.from(bar, { width: '0%', duration: 1.2, delay: 0.4, ease: 'power3.out' });
             }
         } catch {
             els.detail.innerHTML = `<div class="container orgs-empty"><i class="fas fa-circle-exclamation"></i><h3>Організацію не знайдено</h3><p><a href="/organizations">Повернутися до каталогу</a></p></div>`;
@@ -386,6 +616,7 @@
         clearTimeout(searchTimer);
         searchTimer = setTimeout(() => {
             state.q = els.q.value.trim();
+            state.need = '';
             writeQuery();
             loadList();
         }, 300);
@@ -397,8 +628,16 @@
         loadList();
     });
 
+    els.region.addEventListener('change', () => {
+        state.region = els.region.value;
+        state.need = '';
+        writeQuery();
+        loadList();
+    });
+
     els.types.forEach(btn => btn.addEventListener('click', () => {
         state.type = btn.dataset.type;
+        state.need = '';
         syncControls();
         writeQuery();
         loadList();
@@ -408,10 +647,32 @@
         const chip = e.target.closest('.orgs-chip');
         if (!chip) return;
         state.category = chip.dataset.key;
+        state.need = '';
         syncControls();
         writeQuery();
         loadList();
         if (hasGsap) gsap.fromTo(chip, { scale: 0.9 }, { scale: 1, duration: 0.4, ease: 'back.out(3)' });
+    });
+
+    els.needForm.addEventListener('submit', e => {
+        e.preventDefault();
+        const text = els.needForm.elements.need.value.trim();
+        if (text.length < 3) return;
+        runNeed(text);
+    });
+
+    els.needExamples.addEventListener('click', e => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        els.needForm.elements.need.value = btn.textContent;
+        runNeed(btn.textContent);
+    });
+
+    els.needReset.addEventListener('click', () => {
+        state.need = '';
+        els.needForm.elements.need.value = '';
+        writeQuery();
+        loadList();
     });
 
     els.more.addEventListener('click', () => {

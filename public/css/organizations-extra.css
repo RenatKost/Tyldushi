@@ -1,0 +1,430 @@
+/* Organizations catalog: need search, activity index, activity timeline, reviews. */
+
+/* ---------- "Пошук по запиту" ---------- */
+.need-search {
+    display: flex;
+    gap: 0.6rem;
+    max-width: 760px;
+    margin: 0 auto 0.9rem;
+    padding: 0.5rem;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 16px 50px rgba(28, 20, 36, 0.14);
+    border: 1px solid rgba(201, 160, 106, 0.35);
+}
+
+.need-search__field {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    padding: 0 0.6rem 0 1rem;
+    min-width: 0;
+}
+
+.need-search__field i {
+    color: var(--gold);
+    font-size: 1.1rem;
+}
+
+.need-search__field input {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font: 500 1.02rem var(--sans);
+    color: var(--ink);
+    padding: 0.75rem 0;
+}
+
+.need-examples {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0 auto 2rem;
+    max-width: 760px;
+    font-size: 0.86rem;
+    color: var(--text-gray);
+}
+
+.need-examples button {
+    border: 1px solid rgba(201, 160, 106, 0.45);
+    background: rgba(255, 255, 255, 0.7);
+    color: var(--ink);
+    border-radius: 999px;
+    padding: 0.35rem 0.8rem;
+    font: 500 0.84rem var(--sans);
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.need-examples button:hover {
+    background: #fff;
+    border-color: var(--gold);
+}
+
+.need-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 1.2rem;
+    padding: 1rem 1.2rem;
+    border-radius: 16px;
+    background: #fff;
+    border: 1px solid rgba(201, 160, 106, 0.4);
+}
+
+.need-tags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem;
+    margin-top: 0.5rem;
+    font-size: 0.85rem;
+    color: var(--text-gray);
+}
+
+/* ---------- Activity index ---------- */
+.org-activity {
+    --lvl: #9a93a6;
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+}
+
+.org-activity--high { --lvl: #1f9d61; }
+.org-activity--active { --lvl: #3a8fd6; }
+.org-activity--low { --lvl: #d39b2e; }
+.org-activity--none { --lvl: #a39cb0; }
+
+.org-activity__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--lvl);
+    white-space: nowrap;
+}
+
+.org-activity__bar {
+    flex: 1;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(42, 34, 54, 0.08);
+    overflow: hidden;
+}
+
+.org-activity__bar span {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--lvl);
+}
+
+.org-activity__score {
+    font-family: var(--serif);
+    font-size: 1.6rem;
+    color: var(--ink);
+}
+
+.org-activity__score small {
+    font-size: 0.9rem;
+    color: var(--text-gray);
+}
+
+.org-card.is-featured .org-activity__bar {
+    background: rgba(255, 255, 255, 0.15);
+}
+
+.org-card.is-featured .org-activity--none,
+.org-card.is-featured .org-activity--low {
+    --lvl: #e2c48f;
+}
+
+.org-card__why {
+    display: flex;
+    gap: 0.45rem;
+    align-items: baseline;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #1f7a4e;
+}
+
+.org-tag.is-match {
+    box-shadow: 0 0 0 2px rgba(31, 157, 97, 0.35);
+}
+
+.org-verified {
+    color: #1f9d61;
+    margin-left: 0.2rem;
+}
+
+.org-verified-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: 0.6rem;
+    padding: 0.25rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(31, 157, 97, 0.1);
+    color: #1f7a4e;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.org-rating .org-activity {
+    margin-bottom: 0.8rem;
+}
+
+.org-rating__last {
+    font-size: 0.88rem;
+    color: var(--text-gray);
+    margin-bottom: 0.8rem;
+}
+
+.org-rating__last i {
+    color: var(--gold);
+    margin-right: 0.3rem;
+}
+
+.org-rating__why summary {
+    cursor: pointer;
+    font-weight: 700;
+    color: var(--dark-purple);
+    font-size: 0.9rem;
+}
+
+.org-rating__why ul {
+    list-style: none;
+    display: grid;
+    gap: 0.45rem;
+    margin: 0.8rem 0;
+}
+
+.org-rating__why li {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) auto;
+    gap: 0.5rem;
+    align-items: baseline;
+    font-size: 0.86rem;
+    color: var(--text-gray);
+}
+
+.org-rating__why li i {
+    color: #cfc8d8;
+}
+
+.org-rating__why li.is-ok {
+    color: var(--ink);
+}
+
+.org-rating__why li.is-ok i {
+    color: #1f9d61;
+}
+
+.org-rating__note {
+    font-size: 0.78rem;
+    color: var(--text-gray);
+}
+
+/* ---------- Activity timeline ---------- */
+.org-timeline {
+    list-style: none;
+    display: grid;
+    gap: 1rem;
+    position: relative;
+    padding-left: 1.4rem;
+}
+
+.org-timeline::before {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 6px;
+    bottom: 6px;
+    width: 2px;
+    background: linear-gradient(var(--gold), rgba(201, 160, 106, 0.1));
+}
+
+.org-timeline__item {
+    position: relative;
+}
+
+.org-timeline__dot {
+    position: absolute;
+    left: -1.4rem;
+    top: 1.2rem;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    border: 2px solid var(--gold);
+}
+
+.org-timeline__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.3rem;
+}
+
+.org-timeline__meta time {
+    margin: 0;
+}
+
+.org-kind {
+    padding: 0.15rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(201, 160, 106, 0.15);
+    color: #8a6634;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.muted {
+    color: var(--text-gray);
+    font-size: 0.85rem;
+}
+
+/* ---------- Reviews ---------- */
+.org-reviews h2 {
+    flex-wrap: wrap;
+}
+
+.org-reviews__avg {
+    margin-left: auto;
+    font-family: var(--sans);
+    font-size: 0.9rem;
+    color: var(--text-gray);
+}
+
+.org-reviews__avg i,
+.review__stars i {
+    color: var(--gold);
+    font-size: 0.8rem;
+}
+
+.org-reviews__list {
+    display: grid;
+    gap: 0.8rem;
+    margin-bottom: 1.5rem;
+}
+
+.review {
+    padding: 1rem 1.1rem;
+    border-radius: 14px;
+    background: var(--light-gray);
+}
+
+.review__head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.35rem;
+}
+
+.review__head time {
+    margin-left: auto;
+    font-size: 0.78rem;
+    color: var(--text-gray);
+}
+
+.review p {
+    white-space: pre-line;
+    font-size: 0.93rem;
+    color: #4f5862;
+}
+
+.review-form {
+    display: grid;
+    gap: 0.8rem;
+    padding-top: 1.2rem;
+    border-top: 1px dashed #e8e5ef;
+}
+
+.review-form h3 {
+    font-size: 1.2rem;
+}
+
+.review-form__row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 1rem;
+    align-items: end;
+}
+
+.review-stars {
+    display: inline-flex;
+    flex-direction: row-reverse;
+    gap: 0.15rem;
+    border: 0;
+    padding-bottom: 0.6rem;
+}
+
+.review-stars input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.review-stars label {
+    cursor: pointer;
+    font-size: 1.5rem;
+    color: #ddd6e4;
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.review-stars label:hover,
+.review-stars label:hover ~ label,
+.review-stars input:checked ~ label {
+    color: var(--gold);
+}
+
+.review-stars label:hover {
+    transform: scale(1.12);
+}
+
+.review-stars input:focus-visible + label {
+    outline: 2px solid var(--gold);
+    border-radius: 4px;
+}
+
+@media (max-width: 1100px) {
+    .orgs-filters {
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 700px) {
+    .need-search {
+        flex-direction: column;
+        border-radius: 22px;
+    }
+
+    .need-search .btn {
+        width: 100%;
+    }
+
+    .need-result {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .review-form__row {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .orgs-filters {
+        grid-template-columns: minmax(0, 1fr);
+        position: static;
+    }
+}

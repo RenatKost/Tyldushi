@@ -1,14 +1,18 @@
 import { query, withTransaction } from '../db.js';
 import { normalizeCategories } from './categories.js';
+import { refreshRating } from './rating.js';
 import { slugify } from './slug.js';
 
 export const STATUSES = ['registry', 'enriching', 'pending', 'approved', 'rejected', 'rejected_auto', 'hidden'];
 export const CONTACT_KEYS = ['phone', 'email', 'website', 'facebook', 'instagram', 'telegram', 'youtube', 'tiktok'];
 
-const PUBLIC_ORDER = 'is_featured DESC, featured_rank ASC NULLS LAST, name ASC';
+const PUBLIC_ORDER = 'is_featured DESC, featured_rank ASC NULLS LAST, activity_score DESC, name ASC';
+export const CASE_KINDS = ['aid', 'event', 'project', 'report', 'post'];
 
 const LIST_COLUMNS = `id, slug, edrpou, name, short_name, org_type, city, region, help_categories,
     logo_url, is_featured, featured_rank, status, updated_at, contacts,
+    activity_score, activity_level, to_char(last_activity_at, 'YYYY-MM-DD') AS last_activity_at,
+    verified_by_fund, review_count, review_avg,
     (SELECT count(*)::int FROM organization_cases c WHERE c.organization_id = organizations.id) AS cases_count,
     left(coalesce(description, ''), 600) AS excerpt`;
 
@@ -42,13 +46,19 @@ function cleanCases(cases) {
             image_url: str(c?.image_url, 1000),
             happened_at: cleanDate(c?.happened_at),
             source_url: str(c?.source_url, 1000),
+            kind: CASE_KINDS.includes(c?.kind) ? c.kind : 'aid',
+            source: c?.source === 'admin' ? 'admin' : 'bot',
         }))
         .filter(c => c.title)
         .slice(0, 30);
 }
 
-function buildPublicFilters({ city, q, category, type }, params) {
+function buildPublicFilters({ city, region, q, category, type }, params) {
     const where = [`status = 'approved'`];
+    if (region) {
+        params.push(region);
+        where.push(`region = $${params.length}`);
+    }
     if (city) {
         params.push(city);
         where.push(`city = $${params.length}`);
@@ -69,9 +79,9 @@ function buildPublicFilters({ city, q, category, type }, params) {
     return where.join(' AND ');
 }
 
-export async function listPublic({ city, q, category, type, page = 1, limit = 24 }) {
+export async function listPublic({ city, region, q, category, type, page = 1, limit = 24 }) {
     const params = [];
-    const where = buildPublicFilters({ city, q, category, type }, params);
+    const where = buildPublicFilters({ city, region, q, category, type }, params);
     const pageSize = Math.min(Math.max(Number(limit) || 24, 1), 60);
     const offset = (Math.max(Number(page) || 1, 1) - 1) * pageSize;
 
@@ -83,17 +93,24 @@ export async function listPublic({ city, q, category, type, page = 1, limit = 24
     return { items: rows, total: countRows[0].total, page: Number(page) || 1, pageSize };
 }
 
+export async function listRegions() {
+    const { rows } = await query(`SELECT region, count(*)::int AS count FROM organizations
+        WHERE status = 'approved' AND region IS NOT NULL
+        GROUP BY region ORDER BY (region = 'Одеська область') DESC, count DESC, region ASC`);
+    return rows;
+}
+
 export async function listCities() {
     const { rows } = await query(`SELECT city, count(*)::int AS count FROM organizations
         WHERE status = 'approved' AND city IS NOT NULL
-        GROUP BY city ORDER BY count DESC, city ASC`);
+        GROUP BY city ORDER BY (city = 'Одеса') DESC, count DESC, city ASC`);
     return rows;
 }
 
 async function attachCases(org) {
     if (!org) return null;
     const { rows } = await query(
-        `SELECT id, title, description, image_url, to_char(happened_at, 'YYYY-MM-DD') AS happened_at,
+        `SELECT id, title, description, image_url, to_char(happened_at, 'YYYY-MM-DD') AS happened_at, kind, source,
                 source_url, position
          FROM organization_cases WHERE organization_id = $1 ORDER BY position, id`,
         [org.id],
@@ -106,7 +123,9 @@ export async function getPublicBySlug(slug) {
     const { rows } = await query(
         `SELECT id, slug, edrpou, name, short_name, org_type, city, region, address,
                 to_char(registered_at, 'YYYY-MM-DD') AS registered_at, description, help_categories,
-                contacts, logo_url, is_featured, sources, updated_at
+                contacts, logo_url, is_featured, sources, updated_at,
+                activity_score, activity_level, activity_details, to_char(last_activity_at, 'YYYY-MM-DD') AS last_activity_at,
+                verified_by_fund, has_reports, tg_posts_90d, review_count, review_avg
          FROM organizations WHERE slug = $1 AND status = 'approved'`,
         [slug],
     );
@@ -195,6 +214,7 @@ const EDITABLE = {
     help_categories: v => normalizeCategories(v),
     contacts: v => cleanContacts(v),
     logo_url: v => str(v, 1000),
+    verified_by_fund: v => Boolean(v),
 };
 
 function pickEditable(data) {
@@ -210,9 +230,9 @@ async function replaceCases(client, orgId, cases) {
     const list = cleanCases(cases);
     for (const [i, c] of list.entries()) {
         await client.query(
-            `INSERT INTO organization_cases (organization_id, title, description, image_url, happened_at, source_url, position)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [orgId, c.title, c.description, c.image_url, c.happened_at, c.source_url, i],
+            `INSERT INTO organization_cases (organization_id, title, description, image_url, happened_at, source_url, position, kind, source)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [orgId, c.title, c.description, c.image_url, c.happened_at, c.source_url, i, c.kind, c.source],
         );
     }
 }
@@ -233,6 +253,7 @@ export async function createOrg(data) {
         if (data.cases) await replaceCases(client, rows[0].id, data.cases);
         return rows[0].id;
     });
+    await refreshRating(id);
     return getById(id);
 }
 
@@ -251,6 +272,7 @@ export async function updateOrg(id, data) {
         }
         if (Array.isArray(data.cases)) await replaceCases(client, id, data.cases);
     });
+    await refreshRating(id);
     return getById(id);
 }
 

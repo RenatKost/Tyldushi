@@ -35,6 +35,7 @@ const SCHEMA = {
                     description: { type: Type.STRING },
                     date: { type: Type.STRING, description: 'YYYY-MM-DD or empty' },
                     source_url: { type: Type.STRING, description: 'one of the URLs given in the materials' },
+                    kind: { type: Type.STRING, enum: ['aid', 'event', 'project', 'report'], description: 'aid = передана допомога, event = захід, project = проєкт, report = звіт' },
                 },
                 required: ['title', 'description', 'source_url'],
             },
@@ -62,7 +63,7 @@ ${org.registry_purpose ? `- Мета діяльності з реєстру: ${o
   (наприклад: «Купують дрони та автомобілі для бригад на Запорізькому напрямку…»). Не починай з назви, юридичної форми,
   дати реєстрації чи коду ЄДРПОУ і не переказуй дані реєстру.
 - Якщо сайт у матеріалах — це медіа, каталог чи платіжний сервіс, а не сайт самої організації, не використовуй його як джерело про неї.
-- Кейси — до 5 конкретних справ (збори, проєкти, передана допомога) з датою, якщо вона є. source_url має бути одним із URL у матеріалах.
+- Кейси — до 5 конкретних справ (передана допомога, заходи, проєкти, звіти) з датою, якщо вона є, і типом kind. source_url має бути одним із URL у матеріалах.
 - help_categories — лише ключі з цього списку:
 ${categories}
 

@@ -11,6 +11,8 @@ import {
     createEvent, deleteEvent, deleteRequest, getSettings, listEvents, listRequests, reorderEvents,
     requestCounts, saveSettings, setRequestStatus, updateEvent,
 } from '../lib/site.js';
+import { refreshRating } from '../lib/rating.js';
+import { adminListReviews, deleteReview, setReviewStatus } from '../lib/reviews.js';
 import { storageEnabled, uploadImage } from '../storage.js';
 
 const router = express.Router();
@@ -104,6 +106,26 @@ router.post('/requests/:id/status', express.json(), wrap(async (req, res) => {
 router.delete('/requests/:id', wrap(async (req, res) => {
     await deleteRequest(Number(req.params.id));
     res.json({ ok: true });
+}));
+
+/* ---------- public comments ---------- */
+
+router.get('/reviews', wrap(async (req, res) => {
+    res.json(await adminListReviews({ status: req.query.status }));
+}));
+
+router.post('/reviews/:id/status', express.json(), wrap(async (req, res) => {
+    if (!(await setReviewStatus(Number(req.params.id), req.body?.status))) return res.status(404).json({ error: 'Не знайдено' });
+    res.json({ ok: true });
+}));
+
+router.delete('/reviews/:id', wrap(async (req, res) => {
+    await deleteReview(Number(req.params.id));
+    res.json({ ok: true });
+}));
+
+router.post('/organizations/:id/rating', wrap(async (req, res) => {
+    res.json(await refreshRating(Number(req.params.id)));
 }));
 
 /* ---------- site content ---------- */

@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/motion.css">
     <link rel="stylesheet" href="/css/organizations.css">
+    <link rel="stylesheet" href="/css/organizations-extra.css">
 </head>
 <body class="page-orgs">
     <header class="header">
@@ -54,9 +55,27 @@
                 <p class="orgs-eyebrow">Каталог</p>
                 <h1 class="orgs-title">Благодійні фонди та громадські організації України</h1>
                 <p class="orgs-lead">Знайдіть тих, хто допомагає поруч із вами: чим вони займаються, що вже зробили та як з ними зв'язатися.</p>
+                <form class="need-search" id="needForm" role="search">
+                    <label class="need-search__field">
+                        <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
+                        <input type="search" name="need" maxlength="300" autocomplete="off"
+                               placeholder="Опишіть, що вам потрібно: «психолог для чоловіка-ветерана»"
+                               aria-label="Пошук по запиту: опишіть вашу ситуацію">
+                    </label>
+                    <button class="btn btn-gold" type="submit">Знайти</button>
+                </form>
+                <div class="need-examples" id="needExamples">
+                    <span>Наприклад:</span>
+                    <button type="button">психолог після фронту</button>
+                    <button type="button">допомога з протезом</button>
+                    <button type="button">оформити УБД і пільги</button>
+                    <button type="button">продукти для ВПО</button>
+                    <button type="button">юрист</button>
+                </div>
                 <div class="orgs-stats">
                     <div><strong data-stat="total">—</strong><span>організацій</span></div>
                     <div><strong data-stat="cities">—</strong><span>міст</span></div>
+                    <div><strong data-stat="active">—</strong><span>з підтвердженою активністю</span></div>
                 </div>
             </div>
         </section>
@@ -67,6 +86,12 @@
                     <label class="orgs-search">
                         <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
                         <input type="search" name="q" placeholder="Назва або ЄДРПОУ" autocomplete="off" aria-label="Пошук організації">
+                    </label>
+                    <label class="orgs-select">
+                        <i class="fas fa-map" aria-hidden="true"></i>
+                        <select name="region" aria-label="Область">
+                            <option value="">Уся Україна</option>
+                        </select>
                     </label>
                     <label class="orgs-select">
                         <i class="fas fa-location-dot" aria-hidden="true"></i>
@@ -81,6 +106,14 @@
                     </div>
                 </form>
                 <div class="orgs-chips" id="orgCategories" aria-label="Чим допомагають"></div>
+
+                <div class="need-result" id="needResult" hidden>
+                    <div>
+                        <strong>Результати за запитом «<span id="needQuery"></span>»</strong>
+                        <div class="need-tags" id="needTags"></div>
+                    </div>
+                    <button class="btn btn-outline btn-sm" type="button" id="needReset"><i class="fas fa-xmark"></i> Скинути пошук</button>
+                </div>
 
                 <p class="orgs-count" id="orgCount" aria-live="polite"></p>
                 <div class="orgs-grid" id="orgGrid"></div>

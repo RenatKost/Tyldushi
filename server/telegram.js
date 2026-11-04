@@ -138,19 +138,6 @@ export async function sendHelpRequest(r, api = token ? new Api(token) : null) {
     return true;
 }
 
-/** Sends a moderation card to every admin chat. Used by the worker and by /next. */
-export async function sendModerationCard(orgId, api = token ? new Api(token) : null) {
-    if (!api || !adminChats.length) return false;
-    const org = await getById(orgId);
-    if (!org) return false;
-    let messageId = null;
-    for (const chat of adminChats) {
-        const msg = await api.sendMessage(chat, renderCard(org), sendOpts(mainKeyboard(org)));
-        messageId ??= msg.message_id;
-    }
-    await query('UPDATE organizations SET tg_message_id = $2, tg_sent_at = now() WHERE id = $1', [orgId, messageId]);
-    return true;
-}
 
 async function setState(chatId, state) {
     if (state) {
@@ -186,7 +173,7 @@ function createBot() {
         if (!isAdmin(ctx)) {
             return ctx.reply(`Chat id цього чату: <code>${ctx.chat.id}</code>\nДодайте його в змінну TELEGRAM_ADMIN_CHAT_ID на Railway, щоб керувати організаціями.`, { parse_mode: 'HTML' });
         }
-        return ctx.reply('Бот модерації «Тил Душі».\n/queue — скільки організацій чекає рішення\n/next — показати наступну');
+        return ctx.reply('Бот фонду «Тил Душі». Сюди приходять заявки з сайту tyldushi.com.');
     });
 
     bot.use(async (ctx, next) => {
@@ -195,24 +182,6 @@ function createBot() {
             return;
         }
         return next();
-    });
-
-    bot.command('queue', async ctx => {
-        const { rows } = await query(`SELECT
-            count(*) FILTER (WHERE status = 'pending')::int AS pending,
-            count(*) FILTER (WHERE status = 'pending' AND tg_sent_at IS NULL)::int AS unsent,
-            count(*) FILTER (WHERE status = 'registry')::int AS registry,
-            count(*) FILTER (WHERE status = 'approved')::int AS approved
-            FROM organizations`);
-        const r = rows[0];
-        return ctx.reply(`На перевірці: ${r.pending} (ще не надіслано: ${r.unsent})\nОпубліковано: ${r.approved}\nУ реєстрі (не оброблено): ${r.registry}`);
-    });
-
-    bot.command('next', async ctx => {
-        const { rows } = await query(`SELECT id FROM organizations WHERE status = 'pending'
-            ORDER BY tg_sent_at ASC NULLS FIRST, enriched_at ASC LIMIT 1`);
-        if (!rows.length) return ctx.reply('Черга порожня 🎉');
-        await sendModerationCard(rows[0].id, ctx.api);
     });
 
     async function refresh(ctx, orgId, kb, note) {
@@ -303,7 +272,7 @@ function createBot() {
     bot.on('message:text', async ctx => {
         const state = await getState(ctx.from.id);
         if (!state) {
-            if (ctx.chat.type === 'private') await ctx.reply('Використовуйте кнопки під картками або /next');
+            if (ctx.chat.type === 'private') await ctx.reply('Заявки з сайту приходять у групу модераторів.');
             return;
         }
         const value = ctx.message.text;
@@ -343,8 +312,6 @@ export async function registerWebhook() {
         allowed_updates: ['message', 'callback_query'],
     });
     await api.setMyCommands([
-        { command: 'queue', description: 'Скільки організацій чекає рішення' },
-        { command: 'next', description: 'Показати наступну організацію' },
         { command: 'cancel', description: 'Скасувати редагування' },
     ]);
     console.log('[telegram] webhook registered');

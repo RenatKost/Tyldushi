@@ -1,6 +1,10 @@
 import express from 'express';
+import { query } from '../db.js';
 import { CATEGORIES } from '../lib/categories.js';
-import { getPublicBySlug, listCities, listPublic } from '../lib/orgs.js';
+import { getPublicBySlug, listCities, listPublic, listRegions } from '../lib/orgs.js';
+import { LEVELS } from '../lib/rating.js';
+import { matchOrganizations } from '../lib/match.js';
+import { addReview, cleanReview, listReviews } from '../lib/reviews.js';
 import { cleanRequest, createRequest, getSettings, listEvents } from '../lib/site.js';
 import { sendHelpRequest } from '../telegram.js';
 
@@ -47,16 +51,59 @@ router.get('/cities', wrap(async (req, res) => {
 }));
 
 router.get('/organizations', wrap(async (req, res) => {
-    const { city, q, category, type, page, limit } = req.query;
+    const { city, region, q, category, type, page, limit } = req.query;
     res.set('Cache-Control', 'public, max-age=60');
     res.json(await listPublic({
         city: typeof city === 'string' ? city : undefined,
+        region: typeof region === 'string' ? region : undefined,
         q: typeof q === 'string' ? q.trim().slice(0, 100) : undefined,
         category: typeof category === 'string' ? category : undefined,
         type: typeof type === 'string' ? type : undefined,
         page,
         limit,
     }));
+}));
+
+router.get('/regions', wrap(async (req, res) => {
+    res.set('Cache-Control', 'public, max-age=120');
+    res.json(await listRegions());
+}));
+
+router.get('/catalog-stats', wrap(async (req, res) => {
+    const { rows } = await query(`SELECT count(*)::int AS total,
+            count(DISTINCT city)::int AS cities,
+            count(*) FILTER (WHERE activity_level IN ('high', 'active'))::int AS active
+        FROM organizations WHERE status = 'approved'`);
+    res.set('Cache-Control', 'public, max-age=120');
+    res.json(rows[0]);
+}));
+
+router.get('/levels', (req, res) => {
+    res.set('Cache-Control', 'public, max-age=3600');
+    res.json(LEVELS);
+});
+
+// "Пошук по запиту": free-text description of the need → matching organizations.
+router.get('/organizations/match', wrap(async (req, res) => {
+    const q = typeof req.query.q === 'string' ? req.query.q.slice(0, 300) : '';
+    const city = typeof req.query.city === 'string' ? req.query.city : undefined;
+    res.set('Cache-Control', 'public, max-age=60');
+    res.json(await matchOrganizations(q, { city }));
+}));
+
+router.get('/organizations/:slug/reviews', wrap(async (req, res) => {
+    const org = await getPublicBySlug(req.params.slug);
+    if (!org) return res.status(404).json({ error: 'Організацію не знайдено' });
+    res.set('Cache-Control', 'no-cache');
+    res.json(await listReviews(org.id));
+}));
+
+router.post('/organizations/:slug/reviews', express.json({ limit: '10kb' }), wrap(async (req, res) => {
+    if (req.body?.website) return res.status(201).json({ ok: true }); // honeypot
+    const org = await getPublicBySlug(req.params.slug);
+    if (!org) return res.status(404).json({ error: 'Організацію не знайдено' });
+    const review = await addReview(org.id, cleanReview(req.body), req.ip);
+    res.status(201).json(review);
 }));
 
 router.get('/organizations/:slug', wrap(async (req, res) => {

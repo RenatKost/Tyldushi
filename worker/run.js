@@ -1,20 +1,23 @@
 // Worker entry point (Railway cron service).
 //
-//   node worker/run.js              import (if due) → enrich → notify
+//   node worker/run.js              import (if due) → enrich → activity → ratings
 //   node worker/run.js import [--limit 200]
+//   node worker/run.js regions      tax register → region of every organization
 //   node worker/run.js enrich [--limit 5] [--id 12,13]
-//   node worker/run.js notify
+//   node worker/run.js activity     re-read Telegram channels of published organizations
+//   node worker/run.js ratings      recompute activity index
 //   node worker/run.js logos [--limit 50]
 import { migrate, pool, query } from '../server/db.js';
-import { sendModerationCard, telegramEnabled } from '../server/telegram.js';
+import { refreshRatings, refreshTelegramActivity } from './activity.js';
 import { enrichBatch, refreshLogos } from './enrich/index.js';
 import { searchConfigured } from './enrich/search.js';
 import { prettifyName } from './names.js';
+import { importRegions } from './nuo.js';
 import { importRegistry } from './registry.js';
 
 const LOCK_ID = 727274; // pg advisory lock: prevents overlapping cron runs
 const IMPORT_EVERY_DAYS = Number(process.env.IMPORT_EVERY_DAYS || 7);
-const DAILY_LIMIT = Number(process.env.ENRICH_DAILY_LIMIT || 40);
+const DAILY_LIMIT = Number(process.env.ENRICH_DAILY_LIMIT || 30);
 
 function arg(name) {
     const i = process.argv.indexOf(`--${name}`);
@@ -56,7 +59,7 @@ async function runImport() {
 
 async function runEnrich() {
     if (!searchConfigured) {
-        console.log('[enrich] skipped: neither SEARXNG_URL nor TAVILY_API_KEY is set');
+        console.log('[enrich] skipped: TAVILY_API_KEY is not set');
         return;
     }
     const ids = arg('id') ? arg('id').split(',').map(Number) : null;
@@ -65,9 +68,7 @@ async function runEnrich() {
         console.log(`[enrich] daily limit (${DAILY_LIMIT}) reached`);
         return;
     }
-    // Each card goes to the moderators as soon as it is ready, not after the whole batch.
-    const onPending = telegramEnabled ? id => sendModerationCard(id) : undefined;
-    return track('enrich', () => enrichBatch({ limit, ids, onPending }));
+    return track('enrich', () => enrichBatch({ limit, ids }));
 }
 
 /** Re-formats names that an older parser left with broken quotes (cheap, runs every time). */
@@ -87,26 +88,6 @@ async function runLogos() {
     return track('logos', () => refreshLogos({ limit }));
 }
 
-async function runNotify() {
-    if (!telegramEnabled) {
-        console.log('[notify] skipped: TELEGRAM_BOT_TOKEN is not set');
-        return;
-    }
-    return track('notify', async () => {
-        const { rows } = await query(
-            `SELECT id FROM organizations WHERE status = 'pending' AND tg_sent_at IS NULL
-             ORDER BY ai_confidence DESC NULLS LAST, enriched_at LIMIT $1`,
-            [DAILY_LIMIT],
-        );
-        let sent = 0;
-        for (const { id } of rows) {
-            if (await sendModerationCard(id)) sent++;
-            await new Promise(r => setTimeout(r, 1200)); // stay well under Telegram rate limits
-        }
-        return { sent };
-    });
-}
-
 async function main() {
     const command = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : 'all';
     await migrate();
@@ -117,15 +98,20 @@ async function main() {
         return;
     }
 
+    const safe = (name, fn) => fn().catch(err => console.error(`[${name}] failed`, err.message));
+
     if (command === 'import') await runImport();
     else if (command === 'all' && (await importDue())) {
         // A failed registry download must not block enrichment of what is already imported.
-        await runImport().catch(err => console.error('[import] failed', err.message));
+        await safe('import', runImport);
+        await safe('regions', () => track('regions', () => importRegions()));
     }
-    if (command === 'all') await repairNames().catch(err => console.error('[names] failed', err.message));
-    if (command === 'logos' || command === 'all') await runLogos().catch(err => console.error('[logos] failed', err.message));
+    if (command === 'regions') await track('regions', () => importRegions());
+    if (command === 'all') await safe('names', repairNames);
+    if (command === 'logos' || command === 'all') await safe('logos', runLogos);
     if (command === 'enrich' || command === 'all') await runEnrich();
-    if (command === 'notify' || command === 'all') await runNotify();
+    if (command === 'activity' || command === 'all') await safe('activity', () => track('activity', () => refreshTelegramActivity()));
+    if (command === 'ratings' || command === 'all') await safe('ratings', () => track('ratings', refreshRatings));
 }
 
 main()

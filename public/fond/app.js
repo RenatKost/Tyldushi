@@ -125,10 +125,10 @@
             <div class="table-wrap"><table>
                 <thead><tr>
                     <th><input type="checkbox" id="checkAll" aria-label="Обрати всі"></th>
-                    <th>Організація</th><th class="hide-sm">Місто</th><th>Статус</th>
+                    <th>Організація</th><th class="hide-sm">Місто</th><th class="hide-sm">Індекс</th><th>Статус</th>
                     <th title="Показувати на сайті">На сайті</th><th title="Топ">Топ</th><th></th>
                 </tr></thead>
-                <tbody id="rows"><tr><td colspan="7" class="empty">Завантаження…</td></tr></tbody>
+                <tbody id="rows"><tr><td colspan="8" class="empty">Завантаження…</td></tr></tbody>
             </table></div>
             <div class="pager" id="pager"></div>`;
 
@@ -183,12 +183,13 @@
                     <div class="org-name" data-open="${o.id}">${esc(o.name)}</div>
                     <div class="org-sub">${typeShort(o.org_type)}${o.edrpou ? ` · ${esc(o.edrpou)}` : ''}${(o.help_categories || []).length ? ` · ${o.help_categories.length} напр.` : ''}</div>
                 </td>
-                <td class="hide-sm">${esc(o.city || '—')}</td>
+                <td class="hide-sm">${esc(o.city || o.region || '—')}</td>
+                <td class="hide-sm"><b>${o.activity_score ?? 0}</b>${o.verified_by_fund ? ' <i class="fas fa-shield-heart" style="color:#1f9d61" title="Перевірено фондом"></i>' : ''}</td>
                 <td>${badge(o.status)}</td>
                 <td><label class="switch"><input type="checkbox" data-visible="${o.id}" ${o.status === 'approved' ? 'checked' : ''}><span></span></label></td>
                 <td><button class="star ${o.is_featured ? 'is-on' : ''}" data-star="${o.id}" title="Топ"><i class="fas fa-star"></i></button></td>
                 <td><a class="btn btn--sm btn--icon" href="#/org/${o.id}" title="Редагувати"><i class="fas fa-pen"></i></a></td>
-            </tr>`).join('') : '<tr><td colspan="7" class="empty">Нічого немає</td></tr>';
+            </tr>`).join('') : '<tr><td colspan="8" class="empty">Нічого немає</td></tr>';
 
         rows.onchange = run(async e => {
             if (e.target.dataset.id) return updateBulk();
@@ -196,7 +197,7 @@
             if (!id) return;
             const status = e.target.checked ? 'approved' : 'hidden';
             await api('/organizations/bulk', { method: 'POST', body: { ids: [Number(id)], action: status } });
-            const row = rows.querySelector(`[data-row="${id}"] td:nth-child(4)`);
+            const row = rows.querySelector(`[data-row="${id}"] td:nth-child(5)`);
             row.innerHTML = badge(status);
             toast(status === 'approved' ? 'Опубліковано' : 'Приховано');
             refreshMeta();
@@ -210,7 +211,7 @@
             await api(`/organizations/${star.dataset.star}/featured`, { method: 'POST', body: { featured } });
             star.classList.toggle('is-on', featured);
             if (featured) {
-                rows.querySelector(`[data-row="${star.dataset.star}"] td:nth-child(4)`).innerHTML = badge('approved');
+                rows.querySelector(`[data-row="${star.dataset.star}"] td:nth-child(5)`).innerHTML = badge('approved');
                 rows.querySelector(`[data-visible="${star.dataset.star}"]`).checked = true;
             }
             toast(featured ? 'Додано в топ' : 'Прибрано з топу');
@@ -283,6 +284,13 @@
                     <div class="grid2">
                         <label class="field">Заголовок<input data-c="title" value="${esc(c.title)}" required></label>
                         <label class="field">Дата<input type="date" data-c="happened_at" value="${esc(c.happened_at || '')}"></label>
+                        <label class="field">Тип
+                            <select data-c="kind">
+                                ${Object.entries({ aid: 'Допомога', event: 'Захід', project: 'Проєкт', report: 'Звіт', post: 'Публікація' })
+                                    .map(([k, v]) => `<option value="${k}" ${(c.kind || 'aid') === k ? 'selected' : ''}>${v}</option>`).join('')}
+                            </select>
+                        </label>
+                        <input type="hidden" data-c="source" value="${esc(c.source || 'admin')}">
                     </div>
                     <label class="field">Опис<textarea data-c="description">${esc(c.description)}</textarea></label>
                     <div class="grid2">
@@ -371,6 +379,12 @@
                             <label class="field" style="flex-direction:row;display:flex;gap:.5rem;align-items:center;margin-top:.85rem">
                                 <input type="checkbox" name="featured" ${org.is_featured ? 'checked' : ''}> ⭐ Показувати в топі
                             </label>
+                            <label class="field" style="flex-direction:row;display:flex;gap:.5rem;align-items:center;margin-top:.5rem">
+                                <input type="checkbox" name="verified_by_fund" ${org.verified_by_fund ? 'checked' : ''}> 🛡 Перевірено фондом «Тил Душі»
+                            </label>
+                            ${id ? `<p class="org-sub" style="margin-top:.75rem">Індекс активності: <b>${org.activity_score ?? 0}/100</b>${org.last_activity_at ? ` · остання активність ${esc(String(org.last_activity_at).slice(0, 10))}` : ''}</p>` : ''}
+                            <label hidden>
+                            </label>
                         </div>
 
                         <div class="panel">
@@ -458,6 +472,7 @@
                 contacts: Object.fromEntries(CONTACT_FIELDS.map(([k]) => [k, f[`c_${k}`].value])),
                 cases: $$('.case', casesEl).map(el => Object.fromEntries($$('[data-c]', el).map(i => [i.dataset.c, i.value]))),
                 status: f.status.value,
+                verified_by_fund: f.verified_by_fund.checked,
             };
             let saved;
             if (id) {
@@ -483,7 +498,7 @@
                 await api('/organizations/bulk', { method: 'POST', body: { ids: [id], action: 'delete' } });
                 toast('Видалено');
                 await refreshMeta();
-                location.hash = '#/list/pending';
+                location.hash = '#/list/approved';
             }));
             $('#requeue').addEventListener('click', run(async () => {
                 await api('/organizations/bulk', { method: 'POST', body: { ids: [id], action: 'requeue' } });
@@ -723,6 +738,57 @@
         }));
     }
 
+    /* ---------- public comments ---------- */
+    const revState = { status: '' };
+
+    async function renderReviews() {
+        setActiveNav('reviews');
+        const items = await api(`/reviews${revState.status ? `?status=${revState.status}` : ''}`);
+        view.innerHTML = `
+            <div class="page-head"><div><h1>Коментарі</h1><p>Відгуки відвідувачів публікуються одразу. Тут їх можна приховати або видалити.</p></div></div>
+            <div class="toolbar">
+                ${[['', 'Усі'], ['visible', 'Опубліковані'], ['hidden', 'Приховані']].map(([k, l]) =>
+                    `<button class="btn btn--sm ${revState.status === k ? 'btn--primary' : ''}" data-tab="${k}">${l}</button>`).join('')}
+            </div>
+            <div class="table-wrap"><table>
+                <thead><tr><th>Відгук</th><th class="hide-sm">Організація</th><th>Статус</th><th></th></tr></thead>
+                <tbody id="revRows">${items.length ? items.map(r => `
+                    <tr data-id="${r.id}">
+                        <td><div class="req">
+                            <div class="req__head"><b>${esc(r.author_name)}</b>${r.rating ? `<span class="badge">${'★'.repeat(r.rating)}</span>` : ''}
+                                <span class="req__meta">${new Date(r.created_at).toLocaleString('uk-UA', { dateStyle: 'short', timeStyle: 'short' })}</span></div>
+                            <div class="req__msg">${esc(r.text)}</div>
+                        </div></td>
+                        <td class="hide-sm"><a href="/organizations/${esc(r.slug)}" target="_blank">${esc(r.org_name)}</a></td>
+                        <td><span class="badge badge--${r.status === 'visible' ? 'approved' : 'hidden'}">${r.status === 'visible' ? 'Опубліковано' : 'Приховано'}</span></td>
+                        <td style="white-space:nowrap">
+                            <button class="btn btn--sm" data-toggle="${r.status === 'visible' ? 'hidden' : 'visible'}">${r.status === 'visible' ? '<i class="fas fa-eye-slash"></i> Сховати' : '<i class="fas fa-eye"></i> Показати'}</button>
+                            <button class="btn btn--sm btn--danger" data-del title="Видалити"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>`).join('') : '<tr><td colspan="4" class="empty">Коментарів немає</td></tr>'}</tbody>
+            </table></div>`;
+        view.querySelector('.toolbar').onclick = run(async e => {
+            const tab = e.target.closest('[data-tab]');
+            if (!tab) return;
+            revState.status = tab.dataset.tab;
+            await renderReviews();
+        });
+        $('#revRows').onclick = run(async e => {
+            const row = e.target.closest('tr[data-id]');
+            if (!row) return;
+            const toggle = e.target.closest('[data-toggle]');
+            if (toggle) {
+                await api(`/reviews/${row.dataset.id}/status`, { method: 'POST', body: { status: toggle.dataset.toggle } });
+                toast('Оновлено');
+            } else if (e.target.closest('[data-del]')) {
+                if (!confirm('Видалити коментар?')) return;
+                await api(`/reviews/${row.dataset.id}`, { method: 'DELETE' });
+                toast('Видалено');
+            } else return;
+            await renderReviews();
+        });
+    }
+
     /* ---------- router ---------- */
     const router = run(async () => {
         const hash = location.hash || '#/requests';
@@ -737,6 +803,7 @@
         else if (hash === '#/requests') await renderRequests();
         else if (hash === '#/events') await renderEvents();
         else if (hash === '#/settings') await renderSettings();
+        else if (hash === '#/reviews') await renderReviews();
         else location.hash = '#/requests';
     });
 
