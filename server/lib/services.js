@@ -96,3 +96,16 @@ export function cleanServiceList(list) {
             audiences: Array.isArray(s.audiences) ? s.audiences.filter(a => AUDIENCE_KEYS.includes(a)) : [],
         }));
 }
+
+/**
+ * Evidence check for a bot-found service: the quote must itself say what is provided —
+ * name the service ("психологічні консультації") or, if it is long enough, the people it is for.
+ * A slogan like «Кожна історія заслуговує на сцену» proves nothing and is dropped.
+ */
+export function quoteSupports(key, quote) {
+    const text = String(quote || '').toLowerCase();
+    if (!text) return false;
+    const found = detectServices(text);
+    if (found.services.includes(key)) return true;
+    return text.length >= 40 && found.audiences.length > 0;
+}

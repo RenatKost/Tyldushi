@@ -8,7 +8,7 @@ import { query } from '../server/db.js';
 import { displayName } from '../server/lib/display.js';
 import { saveBotServices } from '../server/lib/orgs.js';
 import { refreshRating } from '../server/lib/rating.js';
-import { AUDIENCE_KEYS, cleanServiceList, SERVICE_KEYS, SERVICES } from '../server/lib/services.js';
+import { AUDIENCE_KEYS, cleanServiceList, quoteSupports, SERVICE_KEYS, SERVICES } from '../server/lib/services.js';
 import { extractPage, fetchHtml, readTelegramChannel } from './enrich/crawl.js';
 import { telegramActivity } from './enrich/index.js';
 import { generateJson, llmState, Type } from './enrich/llm.js';
@@ -251,7 +251,10 @@ export async function processItems({ maxCalls = Number(process.env.MONITOR_LLM_D
                     ['aid', 'event', 'project', 'report', 'post'].includes(r.kind) ? r.kind : 'post'],
             );
             stats.cases += rowCount;
-            const services = cleanServiceList((r.services || []).map(s => ({ ...s, source_url: item.url })));
+            const source = `${item.title || ''} ${item.text || ''}`.toLowerCase().replace(/\s+/g, ' ');
+            const services = cleanServiceList((r.services || []).map(s => ({ ...s, source_url: item.url })))
+                .filter(s => s.quote && quoteSupports(s.key, s.quote)
+                    && source.includes(s.quote.toLowerCase().replace(/\s+/g, ' ').slice(0, 60)));
             if (services.length) {
                 await saveBotServices(org.id, services);
                 stats.services += services.length;
@@ -306,11 +309,24 @@ ${materials}`, SERVICES_SCHEMA, { temperature: 0.1 });
     if (!data) return null;
     const text = materials.toLowerCase().replace(/\s+/g, ' ');
     // The quote must really be in the materials: protects the catalog from invented evidence.
-    return cleanServiceList(data.services).filter(s => s.quote
+    return cleanServiceList(data.services).filter(s => s.quote && quoteSupports(s.key, s.quote)
         && text.includes(s.quote.toLowerCase().replace(/\s+/g, ' ').slice(0, 60)));
 }
 
+/** Removes bot services whose quote does not actually prove the service (cheap, no AI). */
+export async function pruneWeakServices({ log = console.log } = {}) {
+    const { rows } = await query(`SELECT organization_id, service, quote FROM organization_services WHERE source = 'bot'`);
+    const weak = rows.filter(r => !quoteSupports(r.service, r.quote));
+    for (const r of weak) {
+        await query(`DELETE FROM organization_services WHERE organization_id = $1 AND service = $2 AND source = 'bot'`,
+            [r.organization_id, r.service]);
+    }
+    if (weak.length) log(`[monitor] removed ${weak.length} weakly supported services`);
+    return weak.length;
+}
+
 export async function backfillServices({ limit = 10, log = console.log } = {}) {
+    await pruneWeakServices({ log });
     const { rows } = await query(
         `SELECT * FROM organizations
          WHERE status = 'approved' AND services_checked_at IS NULL

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cleanServiceList, detectServices } from '../server/lib/services.js';
+import { cleanServiceList, detectServices, quoteSupports } from '../server/lib/services.js';
 
 test('a request is mapped to concrete services and audiences', () => {
     const r = detectServices('потрібен психолог для чоловіка-ветерана');
@@ -25,4 +25,10 @@ test('bot services without a quote or with an unknown key are dropped', () => {
     ]);
     assert.equal(list.length, 1);
     assert.equal(list[0].key, 'prosthetics');
+});
+
+test('a quote must itself prove the service', () => {
+    assert.equal(quoteSupports('children_leisure', 'Кожна історія заслуговує на сцену'), false);
+    assert.equal(quoteSupports('children_education', 'допомогу дітям із синдромом Дауна в місті Одеса'), true);
+    assert.equal(quoteSupports('food', 'Щотижня видаємо продуктові набори переселенцям'), true);
 });
