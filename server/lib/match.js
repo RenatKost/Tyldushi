@@ -233,9 +233,12 @@ export async function matchOrganizations(q, { city, service } = {}) {
     };
 
     const exact = rows.filter(r => r.svc_hits > 0).slice(0, 30).map(toCard);
-    // Related: shares a requested direction AND mentions something from the request, so it is not random.
+    // Related: works in the main direction of the requested service (протез → реабілітація), or shares
+    // a broader direction AND mentions something from the request, so the list is never random.
+    const primary = new Set(meaning.services.map(k => serviceByKey[k]?.category).filter(Boolean));
     const related = rows
-        .filter(r => r.svc_hits === 0 && r.cat_hits > 0 && (r.word_hits > 0 || !meaning.keywords.length))
+        .filter(r => r.svc_hits === 0 && r.cat_hits > 0
+            && (r.word_hits > 0 || !meaning.keywords.length || (r.help_categories || []).some(c => primary.has(c))))
         .slice(0, 9)
         .map(toCard);
 

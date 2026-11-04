@@ -39,7 +39,7 @@ export const SERVICES = [
     { key: 'employment', label: 'Працевлаштування', category: 'education', stems: ['працевлашт', 'робот', 'вакансі', 'роботодав'] },
     { key: 'retraining', label: 'Навчання та перекваліфікація', category: 'education', stems: ['перекваліф', 'курс', 'навчан', 'професі', 'освіт для дорослих', 'тренінг'] },
     // Humanitarian aid
-    { key: 'food', label: 'Продуктові набори та харчування', category: 'humanitarian', stems: ['продукт', 'продуктов', 'харч', 'їж', 'обід', 'круп', 'гаряче'] },
+    { key: 'food', label: 'Продуктові набори та харчування', category: 'humanitarian', stems: ['продукт', 'продуктов', 'харч', 'їж', 'обід', 'круп', 'гаряче', 'поїс', 'нагоду', 'голод', 'еда', 'поесть'] },
     { key: 'clothes', label: 'Одяг і речі першої необхідності', category: 'humanitarian', stems: ['одяг', 'речі', 'взутт', 'ковдр', 'постіль'] },
     { key: 'hygiene', label: 'Засоби гігієни', category: 'humanitarian', stems: ['гігієн', 'підгузк', 'памперс', 'засоби догляду'] },
     { key: 'heating', label: 'Генератори, обігрів, утеплення', category: 'humanitarian', stems: ['генератор', 'дров', 'утеплен', 'обігрів', 'павербанк', 'світло'] },
