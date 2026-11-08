@@ -137,6 +137,14 @@ html.js-motion .hero-image {
 /* The closed mobile menu is moved above the screen, but its white panel and last item used to
    cover the logo in the header; hide it completely while closed. */
 @media (max-width: 960px) {
+    /* backdrop-filter makes the header the containing block of the fixed menu: the open menu was
+       squeezed to the header's height and its items were cut off. The mobile header is opaque instead. */
+    .header {
+        backdrop-filter: none;
+        -webkit-backdrop-filter: none;
+        background: rgba(28, 20, 36, 0.97);
+    }
+
     .nav-menu:not(.active) {
         visibility: hidden;
         transition: transform 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94), visibility 0s linear 0.3s;

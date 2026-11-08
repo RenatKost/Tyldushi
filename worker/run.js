@@ -3,12 +3,14 @@
 //   node worker/run.js              import (if due) → enrich → activity → ratings
 //   node worker/run.js import [--limit 200]
 //   node worker/run.js regions      tax register → region of every organization
+//   node worker/run.js discover     web search → active organizations matched in the registry
 //   node worker/run.js enrich [--limit 5] [--id 12,13]
 //   node worker/run.js monitor      Telegram (daily), sites/YouTube/news (weekly) → activity feed
 //   node worker/run.js ratings      recompute activity index
 //   node worker/run.js logos [--limit 50]
 import { migrate, pool, query } from '../server/db.js';
 import { refreshRatings } from './activity.js';
+import { discover } from './discover.js';
 import { backfillServices, processItems, scanTelegram, scanWeb } from './monitor.js';
 import { enrichBatch, refreshLogos } from './enrich/index.js';
 import { searchConfigured } from './enrich/search.js';
@@ -52,7 +54,7 @@ const SEARCH_BUDGET = Number(process.env.SEARCH_DAILY_BUDGET || 32);
 async function searchBudgetLeft() {
     const { rows } = await query(
         `SELECT coalesce(sum((stats->>'search_requests')::int), 0)::int AS used FROM job_runs
-         WHERE job = 'enrich' AND started_at >= date_trunc('day', now())`,
+         WHERE job IN ('enrich', 'discover') AND started_at >= date_trunc('day', now())`,
     );
     return Math.max(0, SEARCH_BUDGET - rows[0].used);
 }
@@ -75,6 +77,21 @@ async function remainingToday() {
 async function runImport() {
     const limit = arg('limit') ? Number(arg('limit')) : Infinity;
     return track('import', () => importRegistry({ limit }));
+}
+
+// Part of the daily searches goes to discovering active organizations on the web.
+const DISCOVERY_SEARCHES = Number(process.env.DISCOVERY_DAILY_SEARCHES || 6);
+
+async function runDiscover() {
+    if (!searchConfigured) return;
+    // Enough discovered organizations already wait in the queue: keep the searches for enrichment.
+    const { rows } = await query(`SELECT count(*)::int AS n FROM organizations WHERE status = 'registry' AND discovered_at IS NOT NULL`);
+    const budget = Math.min(DISCOVERY_SEARCHES, (await searchBudgetLeft()) - 10);
+    if (rows[0].n >= 40 || budget <= 0) {
+        console.log(`[discover] skipped: ${rows[0].n} discovered organizations wait, budget ${budget}`);
+        return;
+    }
+    return track('discover', () => discover({ searches: budget }));
 }
 
 async function runEnrich() {
@@ -131,6 +148,7 @@ async function main() {
     else if (command === 'all' && (await jobDue('regions', 30))) await safe('regions', () => track('regions', () => importRegions()));
     if (command === 'all') await safe('names', repairNames);
     if (command === 'logos' || command === 'all') await safe('logos', runLogos);
+    if (command === 'discover' || command === 'all') await safe('discover', runDiscover);
     if (command === 'enrich' || command === 'all') await runEnrich();
     // Monitoring: Telegram daily, sites/YouTube/news weekly, then Gemini turns new posts into cases.
     if (command === 'monitor' || command === 'all') {

@@ -54,11 +54,18 @@ function headName(record) {
     return null;
 }
 
+// Clubs, choirs, co-operatives and trade unions: registered as ГО, but not help organizations.
+const NOISE_WORDS = /ХОР|АНСАМБЛ|КООПЕРАТИВ|ГАРАЖ|САДІВН|ДАЧН|МИСЛИВ|РИБАЛ|ОСББ|ПРОФСПІЛК|ПАРТІ/;
+
 function priorityOf(org) {
     let p = 0;
     if (org.org_type === 'charity_fund') p += 40;
     if (HELP_WORDS.test(org.raw_name)) p += 25;
+    if (NOISE_WORDS.test(org.raw_name)) p -= 40;
     if (org.registered_at && org.registered_at >= `${new Date().getFullYear() - 4}-01-01`) p += 20;
+    // Organizations registered before 2014 almost never have a website or social pages.
+    if (org.registered_at && org.registered_at < '2014-01-01') p -= 30;
+    if (org.registered_at && org.registered_at >= '2022-01-01') p += 30;
     if (org.registry_purpose) p += 10;
     if (org.city) p += 10;
     return p;

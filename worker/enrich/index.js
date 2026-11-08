@@ -27,6 +27,8 @@ async function collect(org, log) {
     const kind = org.org_type === 'charity_fund' ? 'благодійний фонд' : 'громадська організація';
     const results = await search(`"${name}" ${kind} ${place} ${org.edrpou || ''}`.replace(/\s+/g, ' ').trim());
     emptySearch = results.length === 0;
+    // The page where discovery found the organization is a result too (often its own site or a news story).
+    if (org.discovery?.url) results.push({ url: org.discovery.url, title: org.discovery.title || '', content: org.discovery.content || '' });
     let ranked = rankResults(org, results);
     if (!ranked.websites.length && !Object.keys(ranked.socials).length) {
         results.push(...(await search(`"${name}" ${place} facebook instagram telegram`.replace(/\s+/g, ' ').trim())));
@@ -216,8 +218,9 @@ export async function enrichBatch({ limit, ids, searchBudget = Infinity, log = c
              WHERE id IN (
                 SELECT id FROM organizations
                 WHERE status = 'registry' AND enrich_attempts < 3
-                -- The focus region (Odesa first) is processed before the rest of Ukraine.
-                ORDER BY (city = $2) DESC NULLS LAST, (region = $3) DESC NULLS LAST,
+                -- Organizations found active on the web go first, then the focus region (Odesa) before the rest.
+                ORDER BY (discovered_at IS NOT NULL) DESC, discovered_at ASC NULLS LAST,
+                         (city = $2) DESC NULLS LAST, (region = $3) DESC NULLS LAST,
                          priority DESC, registered_at DESC NULLS LAST
                 LIMIT $1 FOR UPDATE SKIP LOCKED)
              RETURNING *`,
@@ -232,9 +235,10 @@ export async function enrichBatch({ limit, ids, searchBudget = Infinity, log = c
     };
 
     let emptyStreak = [];
+    const searchesBefore = searchUsage.tavily; // other steps of the same run (discovery) count separately
     for (const [i, org] of rows.entries()) {
         // Each organization needs up to two searches; stop before the daily search budget runs out.
-        if (searchUsage.tavily + 2 > searchBudget) {
+        if (searchUsage.tavily - searchesBefore + 2 > searchBudget) {
             log(`  · daily search budget (${searchBudget}) reached, ${rows.length - i} organizations wait for tomorrow`);
             await requeue(rows.slice(i));
             stats.budget_reached = true;
@@ -271,7 +275,7 @@ export async function enrichBatch({ limit, ids, searchBudget = Infinity, log = c
             );
         }
     }
-    stats.search_requests = searchUsage.tavily;
+    stats.search_requests = searchUsage.tavily - searchesBefore;
     stats.llm_calls = llmState.calls;
     stats.llm_model = llmState.model;
     stats.llm_quota_exhausted = llmState.quotaExhausted;
