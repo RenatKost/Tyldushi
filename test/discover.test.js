@@ -18,3 +18,13 @@ test('Odesa queries come first', () => {
     assert.match(q[0].query, /Одеса/);
     assert.equal(q[0].region, 'Одеська область');
 });
+
+test('a quoted name counts only when introduced as an organization', () => {
+    const c = extractCandidates({
+        title: 'Новини',
+        content: 'Як повідомляє «Українська правда», ГО «Ветеранс хаб Одеса» відкрила простір. Фонд "Ваше місто" допоміг.',
+    });
+    assert.ok(!c.names.includes('Українська правда'));
+    assert.ok(c.names.includes('Ветеранс хаб Одеса'));
+    assert.ok(c.names.includes('Ваше місто'));
+});

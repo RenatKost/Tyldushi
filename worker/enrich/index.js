@@ -28,7 +28,7 @@ async function collect(org, log) {
     const results = await search(`"${name}" ${kind} ${place} ${org.edrpou || ''}`.replace(/\s+/g, ' ').trim());
     emptySearch = results.length === 0;
     // The page where discovery found the organization is a result too (often its own site or a news story).
-    if (org.discovery?.url) results.push({ url: org.discovery.url, title: org.discovery.title || '', content: org.discovery.content || '' });
+    if (org.discovery?.url) results.push({ url: org.discovery.url, title: org.discovery.title || '', content: org.discovery.content || '', discovered: true });
     let ranked = rankResults(org, results);
     if (!ranked.websites.length && !Object.keys(ranked.socials).length) {
         results.push(...(await search(`"${name}" ${place} facebook instagram telegram`.replace(/\s+/g, ' ').trim())));
@@ -40,7 +40,7 @@ async function collect(org, log) {
     // Official website: first candidate whose homepage mentions the organization.
     let site = null;
     const pages = [];
-    for (const candidate of ranked.websites.slice(0, 2)) {
+    for (const candidate of ranked.websites.slice(0, 3)) {
         const fetched = await fetchHtml(candidate.url);
         if (!fetched) continue;
         const home = extractPage(fetched);

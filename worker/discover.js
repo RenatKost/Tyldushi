@@ -38,6 +38,8 @@ const PLACES = [
 
 const REPEAT_AFTER_DAYS = 60;
 const CODE_RE = /(?:ЄДРПОУ|ЕДРПОУ|ЕГРПОУ|код\s+(?:за\s+)?ЄДРПОУ|ідентифікаційний\s+код)\D{0,20}(\d{8})\b/gi;
+// Words that introduce an organization's name right before the quotes.
+const ORG_CONTEXT = /((?:^|[^\p{L}])(?:БФ|БО|ГО|ГС|МГО)(?![\p{L}])|фонд|організаці|об['’]єднанн|спілк|асоціаці|центр|хаб|спільнот|ініціатив|волонтер|благодійн|притул|рух|команд|товариств)[^.!?\n]{0,25}$/iu;
 // Quoted names: «Добре серце», "Добре серце", “Добре серце”.
 const QUOTED_RE = /[«"“„]([^«»"“”„]{3,60})[»"”]/g;
 const GENERIC_CORES = new Set(['НАДІЯ', 'ДОБРО', 'ДОПОМОГА', 'ЖИТТЯ', 'СВІТЛО', 'МРІЯ', 'ВІРА', 'ЛЮБОВ', 'ДОВІРА',
@@ -55,6 +57,9 @@ export function extractCandidates(result) {
     const codes = [...new Set([...text.matchAll(CODE_RE)].map(m => m[1]))];
     const names = new Set();
     for (const m of text.matchAll(QUOTED_RE)) {
+        // Only a name introduced as an organization counts: «Українська правда» quoted as a news source
+        // must not be matched to a registry ГО with the same name.
+        if (!ORG_CONTEXT.test(text.slice(Math.max(0, m.index - 45), m.index))) continue;
         const core = m[1].replace(/\s+/g, ' ').trim();
         const upper = core.toUpperCase();
         // A single common word ("Надія") matches hundreds of registry names — not an identification.

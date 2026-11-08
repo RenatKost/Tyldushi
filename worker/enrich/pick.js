@@ -61,9 +61,12 @@ export function rankResults(org, results) {
         if (MEDIA.test(host)) continue;
         const domainMatch = hostLooksLike(host, tokens);
         const titleMatch = tokenScore(r.title || '', tokens);
-        const score = titleMatch * 2 + (domainMatch ? 2 : 0) + (hasCode ? 1 : 0)
+        const score = titleMatch * 2 + (domainMatch ? 2 : 0) + (hasCode ? 1.5 : 0) + (r.discovered ? 0.5 : 0)
             + (/фонд|благодій|громадськ|волонтер|допомог/i.test(blob) ? 0.5 : 0);
-        if (match < 0.5 || (titleMatch < 0.6 && !domainMatch)) continue;
+        // A page that shows the organization's ЄДРПОУ code, or the page discovery found it on, is a candidate
+        // even when the domain is a foreign spelling (caritas.od.ua for «Карітас»): verifySite checks it later.
+        const strong = hasCode || (r.discovered && match >= 0.5);
+        if (!strong && (match < 0.5 || (titleMatch < 0.6 && !domainMatch))) continue;
         const prev = sites.get(host);
         const origin = (() => { try { return new URL(r.url).origin; } catch { return null; } })();
         if (origin && (!prev || prev.score < score)) sites.set(host, { url: origin, score, snippet: r });
